@@ -29,6 +29,20 @@
 <div id="toast" hidden></div>
 <script src="vendor/xlsx-0.20.3.full.min.js"></script>
 <script src="vendor/jszip-3.10.1.min.js"></script>
+<script>
+/* If the app can't start (a file missing, or a typo in js/config.js), say so instead of showing "Loading…" forever. */
+(function () {
+  var errs = [];
+  window.addEventListener("error", function (e) { errs.push((e.filename ? e.filename.split("/").slice(-2).join("/") + ", line " + e.lineno + ": " : "") + (e.message || "a file could not be loaded")); }, true);
+  setTimeout(function () {
+    var v = document.getElementById("view");
+    if (!v || !/Loading/.test(v.textContent) || window.__appStarted) return;
+    v.innerHTML = '<div class="banner bad" style="display:block"><b>The website could not start.</b><br>Most often this is a typo in <code>js/config.js</code> (use straight quotes " and keep the ; at the end of each line) or a file that did not upload.' +
+      (errs.length ? '<br><br>Details: <code></code>' : '') + '<br><br>See ADMIN_GUIDE.md, Part D.</div>';
+    var c = v.querySelector("code:last-of-type"); if (c && errs.length) c.textContent = errs.join(" | ");
+  }, 8000);
+})();
+</script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
