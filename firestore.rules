@@ -1,0 +1,183 @@
+rules_version = '2';
+
+// MDYS Kalamela – who may read and change what.
+// BEFORE PUBLISHING: replace mdys.kalamela@gmail.com below with the Diocese Google account
+// (all lowercase), the same address as in js/config.js.
+//
+// Roles (stored in users/{email}):
+//   admin      – everything: editions, rules, Centre imports, team members
+//   chief      – chief tabulator: everything a tabulator does + committee tie decisions
+//   tabulator  – intake ticks, marks entry, verification
+//   viewer     – read only (results, scoreboard)
+//
+// Edition phases (editions/{id}.phase):
+//   setup     – entries can be imported and rebuilt; practice marks can be cleared
+//   live      – entries are locked; marks can be entered but never bulk-deleted;
+//               only the Diocese account can switch a live year back to setup
+//   archived  – read only for everyone
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function isOwner() {
+      return signedIn() && myEmail() == 'mdys.kalamela@gmail.com';
+    }
+    function userDoc() {
+      return /databases/$(database)/documents/users/$(myEmail());
+    }
+    function myRole() {
+      return signedIn() && exists(userDoc()) ? get(userDoc()).data.role : '';
+    }
+    function isAdmin()     { return isOwner() || myRole() == 'admin'; }
+    function isChief()     { return isAdmin() || myRole() == 'chief'; }
+    function isTabulator() { return isChief() || myRole() == 'tabulator'; }
+    function isMember()    { return isTabulator() || myRole() == 'viewer'; }
+
+    function phase(ed) {
+      return get(/databases/$(database)/documents/editions/$(ed)).data.phase;
+    }
+    function inSetup(ed)  { return phase(ed) == 'setup'; }
+    // An event whose results were announced is locked: e.g. marks/ev05-g1__1012 belongs to locks/ev05-g1
+    function locked(ed, eid) {
+      return exists(/databases/$(database)/documents/editions/$(ed)/locks/$(eid.split('__')[0]));
+    }
+    function notArchived(ed) { return phase(ed) in ['setup', 'live']; }
+
+    // ---- team members and roles
+    match /users/{email} {
+      allow read: if isAdmin() || (signedIn() && myEmail() == email);
+      allow create, update: if isAdmin()
+        && request.resource.data.role in ['admin', 'chief', 'tabulator', 'viewer']
+        && email == email.lower();
+      allow delete: if isAdmin();
+    }
+
+    // ---- one document per Kalamela year
+    match /editions/{ed} {
+      allow read: if isMember();
+      allow create: if isAdmin() && request.resource.data.phase == 'setup';
+      allow update: if isAdmin()
+        && request.resource.data.phase in ['setup', 'live', 'archived']
+        && (isOwner() || (resource.data.phase != 'archived'
+                          && !(resource.data.phase == 'live' && request.resource.data.phase == 'setup')
+                          // while live, the scoring rules can't be changed (only the owner can)
+                          && (resource.data.phase != 'live' || request.resource.data.config == resource.data.config)));
+        // only the Diocese account can take a live year back to setup or reopen an archived year
+      allow delete: if isOwner() && resource.data.phase == 'setup';
+
+      // Centre forms, participants and event lists: changed only while in setup
+      // Personal details (dates of birth, phone numbers, photos) are visible only to the chief tabulator and admins
+      match /centres/{id} {
+        allow read: if isChief();
+        allow write: if isAdmin() && inSetup(ed);
+      }
+      match /participants/{id} {
+        allow read: if isChief();
+        allow write: if isAdmin() && inSetup(ed);
+      }
+      match /lists/{id} {
+        allow read: if isMember();
+        allow write: if isAdmin() && inSetup(ed);
+      }
+
+      // Fees received from each Centre (recorded until the year is archived)
+      match /payments/{id} {
+        allow read: if isChief();
+        allow write: if isAdmin() && notArchived(ed)
+          && request.resource.data.keys().hasOnly(['amount', 'by'])
+          && request.resource.data.amount is number;
+      }
+
+      // Judges' marks: one document per entry, stamped with who saved it and when
+      // Whoever changes marks or attendance becomes "entered by"; verification must then be redone
+      // by a different person ("four eyes"). Both are stamped with the server's time.
+      match /marks/{eid} {
+        function d() { return request.resource.data; }
+        function shapeOk() {
+          return isTabulator() && notArchived(ed)
+            && d().keys().hasOnly(['att', 'j1', 'j1w', 'j2', 'j2w', 'ver', 'by', 'at', 'rev',
+                                   'enteredBy', 'enteredName', 'enteredAt', 'verBy', 'verName', 'verAt'])
+            && !locked(ed, eid)
+            && d().by == myEmail() && d().at == request.time
+            && d().att in ['Present', 'Absent', 'Disqualified']
+            && d().j1 is list && d().j1.size() <= 10 && d().j2 is list && d().j2.size() <= 10
+            && d().ver is bool
+            && d().get('enteredName', '') is string && d().get('enteredName', '').size() <= 80
+            && d().get('verName', '') is string && d().get('verName', '').size() <= 80;
+        }
+        function marksOf(x) { return [x.get('att', ''), x.get('j1', []), x.get('j1w', null), x.get('j2', []), x.get('j2w', null)]; }
+        function freshEntry() {          // this person entered or changed the marks
+          return d().enteredBy == myEmail() && d().enteredAt == request.time && d().ver == false
+            && !('verBy' in d()) && !('verAt' in d());
+        }
+        function verifyOnly() {          // only the Verified tick changes; marks and "entered by" stay as they were
+          return marksOf(d()) == marksOf(resource.data)
+            && d().get('enteredBy', '') == resource.data.get('enteredBy', '')
+            && d().get('enteredAt', null) == resource.data.get('enteredAt', null)
+            && (d().ver == false
+                ? (!('verBy' in d()) && !('verAt' in d()))
+                : (d().verBy == myEmail() && d().verAt == request.time && d().verBy != d().get('enteredBy', '')));
+        }
+        allow read: if isMember();
+        // Revision number: each save must build on the version the person was looking at.
+        // If someone else saved the row in between, the save is refused instead of silently overwriting theirs.
+        allow create: if shapeOk() && freshEntry() && d().rev == 1;
+        allow update: if shapeOk() && (freshEntry() || verifyOnly()) && d().rev == resource.data.get('rev', 0) + 1;
+        allow delete: if isAdmin() && inSetup(ed);
+      }
+
+      // Intake desk ticks
+      match /intake/{key} {
+        allow read: if isMember();
+        allow create, update: if isTabulator() && notArchived(ed)
+          && request.resource.data.keys().hasOnly(['rec', 'time', 'venue', 'op', 'by', 'name'])
+          && request.resource.data.by == myEmail();
+        allow delete: if isAdmin() && inSetup(ed);
+      }
+
+      // Committee decisions on ties
+      match /decisions/{eid} {
+        allow read: if isMember();
+        allow create, update: if isChief() && notArchived(ed) && !locked(ed, eid)
+          && request.resource.data.keys().hasOnly(['pos', 'note', 'by', 'name'])
+          && request.resource.data.pos in ['1st', '2nd', '3rd', 'None']
+          && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 300))
+          && request.resource.data.by == myEmail();
+        allow delete: if isChief() && notArchived(ed) && !locked(ed, eid);
+      }
+
+      // Results announced: one document per event. While it exists, that event's marks and decisions
+      // can't change. The chief tabulator can remove it (unlock) to correct a mistake; both are audited.
+      match /locks/{key} {
+        allow read: if isMember();
+        allow create: if isChief() && notArchived(ed)
+          && request.resource.data.keys().hasOnly(['by', 'name', 'at'])
+          && request.resource.data.by == myEmail() && request.resource.data.at == request.time
+          && request.resource.data.name is string && request.resource.data.name.size() <= 80;
+        allow update: if false;
+        allow delete: if isChief() && notArchived(ed);
+      }
+
+      // Audit trail: every save is recorded; nobody (not even the owner) can change or delete it
+      match /audit/{id} {
+        allow read: if isChief();
+        allow create: if isTabulator() && notArchived(ed)
+          && request.resource.data.by == myEmail()
+          && request.resource.data.at == request.time
+          && request.resource.data.kind is string;
+        allow update, delete: if false;
+      }
+    }
+
+    // Everything else is closed
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
