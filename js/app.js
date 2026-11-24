@@ -70,9 +70,9 @@ const VIEWS = [
 const lastInArea = {};   // remembers the screen last opened in each area
 const myViews = () => VIEWS.filter(v => v.roles.includes(S.role));
 function viewId() {
-  const h = location.hash.replace("#", ""); const mine = myViews();
-  if (mine.some(v => v.id === h)) return h;
-  return homeView();
+  // Only a known screen name is accepted; the id returned is the website's own copy, never text from the address bar.
+  const h = location.hash.replace("#", ""), known = myViews().find(v => v.id === h);
+  return known ? known.id : homeView();
 }
 /** Where each person starts: admins prepare entries while the year is being set up; on the day everyone starts in tabulation. */
 function homeView() {
@@ -178,10 +178,10 @@ function renderTabs() {
   const areas = AREAS.filter(a => mine.some(x => x.area === a.id));
   const first = a => lastInArea[a.id] && mine.some(x => x.id === lastInArea[a.id]) ? lastInArea[a.id] : mine.find(x => x.area === a.id).id;
   const top = areas.length > 1 ? `<div class="areas" role="navigation" aria-label="Areas">${areas.map(a =>
-    `<a href="#${first(a)}" class="area${a.id === cur ? " on" : ""}" ${a.id === cur ? 'aria-current="true"' : ""} title="${esc(a.hint)}">${esc(a.label)}</a>`).join("")}</div>` : "";
+    `<a href="#${esc(first(a))}" class="area${a.id === cur ? " on" : ""}" ${a.id === cur ? 'aria-current="true"' : ""} title="${esc(a.hint)}">${esc(a.label)}</a>`).join("")}</div>` : "";
   const subs = mine.filter(x => x.area === cur);
   const sub = `<div class="subtabs" aria-label="${esc((AREAS.find(a => a.id === cur) || {}).label || "")} screens">${subs.map(x =>
-    `<a href="#${x.id}" ${x.id === v ? 'aria-current="page"' : ""}>${esc(x.label)}</a>`).join("")}</div>`;
+    `<a href="#${esc(x.id)}" ${x.id === v ? 'aria-current="page"' : ""}>${esc(x.label)}</a>`).join("")}</div>`;
   $("#tabs").innerHTML = top + sub; $("#tabs").hidden = false;
 }
 export function renderAll() {
