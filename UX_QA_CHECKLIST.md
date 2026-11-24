@@ -13,12 +13,15 @@ Use a staging copy and test with real test accounts for each role. Do not use th
 
 ### Navigation and responsive layout
 - [ ] Admin, chief, tabulator, viewer and stage-manager accounts see only the screens allowed for their role.
-- [ ] Area navigation and browser back/forward navigation work.
+- [ ] Sidebar shows Overview, then Entries / Tabulation / Results / Settings, with the open screen highlighted; browser back/forward work.
+- [ ] Phone and tablet: ☰ opens the sidebar; choosing a screen, Escape, or tapping outside closes it.
 - [ ] Year selector and phase badge remain usable at desktop and phone widths.
 - [ ] No horizontal page overflow at 320px, 375px, 768px and desktop widths.
 
 ### Overview dashboard
 - [ ] Counts match Control and Results for the selected year.
+- [ ] Live operations matches what stage managers have started and marked on their Stage screens.
+- [ ] Needs attention lines appear as sheets are received and marks entered, and each opens the right screen.
 - [ ] Quick-action links open the correct screen and preserve the selected year.
 - [ ] Empty year / no event-list state is understandable.
 
@@ -42,6 +45,7 @@ Use a staging copy and test with real test accounts for each role. Do not use th
 - [ ] Unknown chest numbers and unpublished schedule states show clear messages.
 - [ ] Active, pending and completed statuses update live.
 - [ ] Change number returns focus to the chest-number field.
+- [ ] On the Kalamela day, the Up next countdown matches the planned time.
 - [ ] No names, dates of birth, contact details or photos are exposed.
 
 ### Release gate

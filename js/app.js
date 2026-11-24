@@ -3,11 +3,12 @@
 
 import * as D from "./db.js";
 import { computeAll, groupLabel, LETTERS } from "./compute.js";
-import { $, $$, esc, fmt, isNum, parseMark, toast, pill, placeClass, enqueue, downloadXlsx } from "./util.js";
+import { $, $$, esc, fmt, isNum, parseMark, toast, pill, placeClass, enqueue, downloadXlsx, icon } from "./util.js";
 import { DEFAULT_CONFIG } from "./defaults.js";
 import { SITE_NAME, ORG_NAME } from "./config.js";
 import * as Admin from "./admin.js";
 import * as Stage from "./stage.js";
+import { stageQueue, stageStatusOf } from "./stage.js";
 
 // ---------------------------------------------------------------- state
 export const S = {
@@ -40,7 +41,7 @@ export const gl = code => groupLabel(cfg(), code);
 const ALL = ["admin", "chief", "tabulator", "viewer"], TAB = ["admin", "chief", "tabulator"], CHIEF = ["admin", "chief"], ADM = ["admin"];
 const STG = ["admin", "chief", "tabulator", "stage"];   // stage managers see only their Stage screen
 // Screens are grouped into four areas that follow the year: entries before the day, tabulation on the day,
-// results after, settings any time. The top row shows the areas; the second row shows the current area's screens.
+// results after, settings any time. The sidebar shows Overview on top, then each area's screens under its heading.
 const AREAS = [
   { id: "entries", label: "Entries", hint: "Centre forms, participants, event lists" },
   { id: "tabulation", label: "Tabulation", hint: "On the day: intake, marks, ties" },
@@ -68,7 +69,6 @@ const VIEWS = [
   { id: "team", label: "Team & roles", area: "settings", roles: ADM, fn: v => Admin.vTeam(v, ctx) },
   { id: "backup", label: "Backup & audit", area: "settings", roles: CHIEF, fn: v => Admin.vBackup(v, ctx) },
 ];
-const lastInArea = {};   // remembers the screen last opened in each area
 const myViews = () => VIEWS.filter(v => v.roles.includes(S.role));
 function viewId() {
   // Only a known screen name is accepted; the id returned is the website's own copy, never text from the address bar.
@@ -86,7 +86,7 @@ function homeView() {
 const ctx = { S, cfg, phase, can, gl, D, renderAll: () => renderAll(), recompute: () => compute(), watchPeople: () => watchPeople() };
 
 // ---------------------------------------------------------------- boot & sign-in
-$("#siteTitle").textContent = SITE_NAME; $("#siteSub").textContent = ORG_NAME;
+$("#siteTitle").textContent = SITE_NAME; $("#siteSub").textContent = ORG_NAME; $("#printTitle").textContent = SITE_NAME; $("#printSub").textContent = ORG_NAME;
 window.__appStarted = true;   // tells index.html the code loaded
 window.addEventListener("hashchange", () => { $("#view").dataset.v = ""; renderAll(); window.scrollTo(0, 0); });
 window.addEventListener("online", renderNotice); window.addEventListener("offline", renderNotice);
@@ -109,14 +109,14 @@ if (!D.configured) {
   });
 }
 function showSignIn() {
-  stopEdition(); $("#tabs").hidden = true; $("#who").innerHTML = "";
-  $("#view").innerHTML = `<div class="signin"><span class="mark" aria-hidden="true" style="transform:scale(1.6);margin:6px"><i></i><i></i><i></i><i></i></span>
+  stopEdition(); hideNav(); $("#who").innerHTML = "";
+  $("#view").innerHTML = `<div class="signin"><img class="signin-logo" src="img/kalamela-logo.png" alt="Kalamela logo" width="96" height="96">
     <h2>${esc(SITE_NAME)}</h2><p>Sign in with the Google account the Diocese added for you.</p>
     <button class="btn primary" id="signin">Sign in with Google</button><p class="small">Only people added by the Kalamela admin can open this site.</p></div>`;
   $("#signin").onclick = async () => { try { await D.signIn(); } catch (e) { if (e && e.code !== "auth/popup-closed-by-user") toast("Sign-in didn't complete. Allow pop-ups for this site and try again.", "bad"); } };
 }
 function showNoAccess() {
-  $("#tabs").hidden = true; whoBar();
+  hideNav(); whoBar();
   $("#view").innerHTML = `<div class="signin"><h2>No access yet</h2><p>You're signed in as <b>${esc(S.user.email)}</b>, but this account hasn't been added to the Kalamela team. Ask the Kalamela admin to add this email under Team &amp; roles, then reload.</p>
     <button class="btn" id="so">Sign in with a different account</button></div>`;
   $("#so").onclick = () => D.signOutUser();
@@ -124,13 +124,32 @@ function showNoAccess() {
 function whoBar() {
   const roleName = { admin: "Admin", chief: "Chief tabulator", tabulator: "Tabulator", stage: "Stage manager", viewer: "Viewer" }[S.role] || "No access";
   const eds = [...S.editions].sort((a, b) => b.id.localeCompare(a.id));
-  $("#who").innerHTML = `${eds.length ? `<span class="ed"><select class="sel" id="edPick" aria-label="Kalamela year">${eds.map(e => `<option value="${esc(e.id)}" ${e.id === S.ed ? "selected" : ""}>${esc(e.name || e.id)}</option>`).join("")}</select>
+  const initials = String(S.user.name || S.user.email || "?").split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
+  $("#who").innerHTML = `${eds.length ? `<span class="ed"><label for="edPick">Edition</label><select class="sel" id="edPick" aria-label="Kalamela year">${eds.map(e => `<option value="${esc(e.id)}" ${e.id === S.ed ? "selected" : ""}>${esc(e.name || e.id)}</option>`).join("")}</select>
       ${S.edition ? `<span class="phase ${esc(S.edition.phase)}">${esc(S.edition.phase === "setup" ? "Setting up" : S.edition.phase === "live" ? "Live" : "Archived")}</span>` : ""}</span>` : ""}
-    ${S.user.photo ? `<img src="${esc(S.user.photo)}" alt="" width="22" height="22" referrerpolicy="no-referrer">` : ""}<span class="nm" title="${esc(S.user.email)}">${esc(S.user.name)}</span><span class="role">${roleName}</span>
-    <button class="btn" id="signout" style="padding:4px 9px">Sign out</button>`;
+    <span class="me-chip" title="${esc(S.user.email)}">${S.user.photo ? `<img src="${esc(S.user.photo)}" alt="" width="28" height="28" referrerpolicy="no-referrer">` : `<span class="av" aria-hidden="true">${esc(initials)}</span>`}<span class="me-txt"><span class="nm">${esc(S.user.name)}</span><span class="role">${roleName}</span></span></span>
+    <button class="btn ghost" id="signout">Sign out</button>`;
   const p = $("#edPick"); if (p) p.onchange = e => selectEdition(e.target.value);
   $("#signout").onclick = () => D.signOutUser();
 }
+
+// ---------------------------------------------------------------- sidebar (a drawer on phones and tablets)
+const narrow = () => window.matchMedia("(max-width: 960px)").matches;
+function setDrawer(open) {
+  const side = $("#tabs"), btn = $("#menuBtn");
+  document.body.classList.toggle("drawer-open", open);
+  $("#scrim").hidden = !open; btn.setAttribute("aria-expanded", open ? "true" : "false");
+  btn.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+  if (open) { const cur = side.querySelector('[aria-current="page"]') || side.querySelector("a"); if (cur) cur.focus(); }
+}
+function hideNav() { $("#tabs").hidden = true; $("#menuBtn").hidden = true; document.body.classList.remove("has-side"); setDrawer(false); }
+$("#menuBtn").onclick = () => setDrawer(!document.body.classList.contains("drawer-open"));
+$("#scrim").onclick = () => setDrawer(false);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && document.body.classList.contains("drawer-open")) { setDrawer(false); $("#menuBtn").focus(); } });
+$("#tabs").addEventListener("click", e => { if (e.target.closest("a") && narrow()) setDrawer(false); });
+window.matchMedia("(max-width: 960px)").addEventListener("change", () => setDrawer(false));
+// the sidebar sits just under the top bar, whose height changes when it wraps on small screens
+new ResizeObserver(() => document.documentElement.style.setProperty("--toph", $(".top").getBoundingClientRect().bottom + "px")).observe($(".top"));
 
 function startEditions() {
   D.watchEditions(list => {
@@ -174,20 +193,19 @@ function compute() {
   S.R = computeAll({ lists: [...S.lists.values()], marks, intake: S.intake, decisions: S.decisions, locks: S.locks, config: cfg() });
 }
 function renderTabs() {
-  const v = viewId(), mine = myViews(), cur = (VIEWS.find(x => x.id === v) || {}).area;
-  lastInArea[cur] = v;
-  const areas = AREAS.filter(a => mine.some(x => x.area === a.id));
-  const first = a => lastInArea[a.id] && mine.some(x => x.id === lastInArea[a.id]) ? lastInArea[a.id] : mine.find(x => x.area === a.id).id;
-  const top = areas.length > 1 ? `<div class="areas" role="navigation" aria-label="Areas">${areas.map(a =>
-    `<a href="#${esc(first(a))}" class="area${a.id === cur ? " on" : ""}" ${a.id === cur ? 'aria-current="true"' : ""} title="${esc(a.hint)}">${esc(a.label)}</a>`).join("")}</div>` : "";
-  const subs = mine.filter(x => x.area === cur);
-  const sub = `<div class="subtabs" aria-label="${esc((AREAS.find(a => a.id === cur) || {}).label || "")} screens">${subs.map(x =>
-    `<a href="#${esc(x.id)}" ${x.id === v ? 'aria-current="page"' : ""}>${esc(x.label)}</a>`).join("")}</div>`;
-  $("#tabs").innerHTML = top + sub; $("#tabs").hidden = false;
+  const v = viewId(), mine = myViews();
+  if (mine.length < 2) return hideNav();   // stage managers have one screen: no sidebar needed
+  const link = x => `<a href="#${esc(x.id)}" ${x.id === v ? 'aria-current="page"' : ""}>${icon(x.id)}<span>${esc(x.label)}</span></a>`;
+  const over = mine.find(x => x.id === "overview");
+  const groups = AREAS.map(a => [a, mine.filter(x => x.area === a.id && x.id !== "overview")]).filter(([, xs]) => xs.length);
+  $("#tabs").innerHTML = `<div class="side-in">${over ? `<div class="side-group">${link(over)}</div>` : ""}${groups.map(([a, xs]) =>
+    `<div class="side-group" role="group" aria-labelledby="sg-${a.id}"><div class="side-h" id="sg-${a.id}">${esc(a.label)}</div>${xs.map(link).join("")}</div>`).join("")}</div>`;
+  $("#tabs").hidden = false; $("#menuBtn").hidden = false; document.body.classList.add("has-side");
 }
 export function renderAll() {
   if (!S.user || !S.role) return;
   compute(); whoBar(); renderTabs(); renderNotice();
+  $("#printTitle").textContent = S.edition?.name || SITE_NAME;   // printed pages carry the logo and the year
   const view = $("#view"), v = viewId();
   if (!S.ed) { view.dataset.v = ""; return can.admin() ? Admin.vYears(view, ctx) : (view.innerHTML = `<div class="panel empty"><b>No Kalamela year has been set up yet</b><span>The admin creates one under Years.</span></div>`); }
   if (v === "entry" && view.dataset.v === "entry" && $("#marksBody")?.dataset.key === entryKey) return refreshEntry();
@@ -220,28 +238,73 @@ function wirePrint(view) { view.querySelectorAll("[data-print]").forEach(b => (b
 
 // ================================================================ OVERVIEW
 function vOverview(view) {
-  const events = S.R?.events || [];
-  const total = events.length, ready = events.filter(e => e.status === "Ready").length;
-  const verified = S.R?.rowsAll?.filter(r => r.ver).length || 0;
-  const eligible = S.R?.rowsAll?.filter(r => r.att === "Present").length || 0;
-  const ties = events.filter(e => String(e.status).toLowerCase().includes("tie")).length;
-  const rec = events.filter(e => e.intake?.rec).length;
-  const pct = (a,b) => b ? Math.round(a / b * 100) : 0;
-  const links = [
-    ...(can.tab() ? [['control','Open control room','Monitor sheets, verification and event readiness'],['entry','Enter marks','Continue scoring and verify entries']] : []),
-    ['board','View scoreboard','See the current standings'],
-    ...(can.chief() ? [['backup','Backup & audit','Download a safety copy and review activity']] : [])
-  ];
+  const events = S.R?.events || [], rows = S.R?.rowsAll || [];
+  const total = events.length, cnt = st => events.filter(e => e.status === st).length;
+  const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+  const people = (S.R?.people || []).length;
+  const centres = new Set(rows.map(r => r.e.centre).filter(Boolean)).size;
+  const venues = ((S.plan && S.plan.stages) || []).filter(x => x.kind !== "room").length;
+  const locked = events.filter(e => e.lock).length;
+  const mine = myViews(), has = id => mine.some(x => x.id === id);
+  const phaseTxt = S.edition?.phase === "live" ? "Live event" : S.edition?.phase === "archived" ? "Archived" : "Setting up";
+
+  const stat = (ic, k, v, sub, extra = "", tone = "") => `<div class="stat ${tone}"><span class="stat-ic">${icon(ic)}</span><div class="stat-b"><div class="k">${k}</div><div class="v">${v}</div><div class="sub">${sub}</div>${extra}</div></div>`;
+  const stats = `<div class="stats">
+    ${stat("people", "Participants", people, "in individual events", "", "t-teal")}
+    ${stat("schedule", "Events", total, venues ? `${venues} stage${venues === 1 ? "" : "s"} planned` : "no stages planned yet", "", "t-orange")}
+    ${stat("check", "Results finalised", locked, `${pct(locked, total)}% complete`, `<div class="bar"><i style="width:${pct(locked, total)}%"></i></div>`, "t-maroon")}
+    ${stat("awards", "Centres", centres, "taking part", "", "t-yellow")}
+  </div>`;
+
+  // Live operations: what is on each stage now, from the Stage screen's live progress
+  const stages = ((S.plan && S.plan.stages) || []);
+  const attOf = eid => (S.att.get(eid) || {}).att || "";
+  const live = stages.map(st => {
+    const q = stageQueue(S, st.id); if (!q.length) return "";
+    const now = q.find(L => stageStatusOf(S, L.key) === "active"), next = q.find(L => stageStatusOf(S, L.key) === "pending" && L !== now);
+    const done = q.filter(L => stageStatusOf(S, L.key) === "done").length;
+    if (!now) return `<div class="live-row idle"><div class="live-top"><b>${esc(st.name)}</b>${next ? `<span class="muted">Next: ${esc(next.ev)} · ${esc(gl(next.grp))}${S.plan.items[next.key]?.start ? ` · ${esc(S.plan.items[next.key].start)}` : ""}</span>` : `<span class="muted">${done ? "All events completed" : "Nothing scheduled"}</span>`}<span class="pill ${next ? "s-awaiting" : "s-locked"}">${next ? "Waiting" : "Done"}</span></div></div>`;
+    const n = (now.entries || []).length, marked = (now.entries || []).filter(e => attOf(e.eid)).length;
+    const showAtt = S.role !== "viewer";
+    return `<div class="live-row"><div class="live-top"><b>${esc(st.name)}</b><span class="ev">${esc(now.ev)} · ${esc(gl(now.grp))}</span><span class="pill live-pill">Live</span></div>
+      <div class="live-meta">${n} entr${n === 1 ? "y" : "ies"}${next ? ` · Next: ${esc(next.ev)} · ${esc(gl(next.grp))}` : " · last event on this stage"}</div>
+      ${showAtt ? `<div class="live-prog"><span>${marked} of ${n} marked present or absent</span><b>${pct(marked, n)}%</b></div><div class="bar"><i style="width:${pct(marked, n)}%"></i></div>` : ""}</div>`;
+  }).filter(Boolean);
+  const liveCard = `<section class="ocard"><div class="ocard-h">${icon("live")}<div><h3>Live operations</h3><p>On stage now</p></div></div>
+    ${live.length ? `<div class="live-list">${live.join("")}</div>` : `<p class="muted ocard-empty">${stages.length ? "No events have been placed on stages yet. Plan them on the Schedule screen." : "The schedule hasn't been made yet."}</p>`}</section>`;
+
+  // Needs attention: things a tabulator should act on, each linking to the screen that fixes it
+  const attn = [];
+  if (can.tab()) {
+    const toEnter = cnt("Received – to enter"), errs = cnt("Entering / errors"), ver = cnt("Verify"), ties = cnt("Tie – committee");
+    if (toEnter) attn.push(["centres", `${toEnter} event${toEnter === 1 ? "" : "s"} received, marks not entered`, "control"]);
+    if (errs) attn.push(["alert", `${errs} event${errs === 1 ? "" : "s"} with marks missing or to correct`, "entry"]);
+    if (ver) attn.push(["results", `${ver} event${ver === 1 ? "" : "s"} waiting for verification`, "entry"]);
+    if (ties) attn.push(["people", `${ties} tie${ties === 1 ? "" : "s"} to be resolved by the committee`, "results"]);
+    // events running behind: on the Kalamela day, still pending 15 minutes after their planned start
+    const today = new Date(), iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    if (cfg().eventDate === iso && S.plan && S.plan.items) {
+      const mins = today.getHours() * 60 + today.getMinutes();
+      const late = [...S.lists.values()].filter(L => { const it = S.plan.items[L.key]; if (!it || !it.start || stageStatusOf(S, L.key) !== "pending") return false;
+        const [h, m] = it.start.split(":").map(Number); return h * 60 + m + 15 < mins; }).length;
+      if (late) attn.push(["clock", `${late} event${late === 1 ? "" : "s"} running behind schedule`, has("schedule") ? "schedule" : "control"]);
+    }
+  }
+  const attnCard = can.tab() ? `<section class="ocard"><div class="ocard-h warn">${icon("alert")}<div><h3>Needs attention</h3><p>Act on these to keep results moving</p></div>${attn.length ? `<span class="count">${attn.length} item${attn.length === 1 ? "" : "s"}</span>` : ""}</div>
+    ${attn.length ? `<div class="attn">${attn.map(([ic, t, to]) => `<a href="#${to}">${icon(ic)}<span>${esc(t)}</span>${icon("chevron", "ic chev")}</a>`).join("")}</div>`
+      : `<p class="ocard-empty ok-line">${icon("check")} Nothing needs attention right now.</p>`}</section>` : "";
+
+  const acts = [["entry", "entry", "Enter marks"], ["control", "control", "Open control"], ["all", "all", "View results"], ["board", "board", "Scoreboard"], ["certs", "certs", "Generate certificates"], ["backup", "backup", "Backup data"]]
+    .filter(([id]) => has(id));
+  const actions = `<section class="overview-section"><h3 class="sec-h">${icon("bolt")} Quick actions</h3><div class="qa">${acts.map(([id, ic, t], i) =>
+    `<a class="btn ${i === 0 ? "primary" : "outline"}" href="#${id}">${icon(ic)}${esc(t)}</a>`).join("")}</div></section>`;
+
   view.innerHTML = `<div class="view overview-view">
-    <div class="vhead"><div><h2>Welcome to Kalamela</h2><p>Your operational overview for <b>${esc(S.edition?.name || S.ed)}</b>. Choose a task below to continue.</p></div><span class="phase ${esc(S.edition?.phase || 'setup')}">${esc(S.edition?.phase === 'live' ? 'Live event' : S.edition?.phase === 'archived' ? 'Archived' : 'Setting up')}</span></div>
-    <div class="tiles overview-metrics">
-      <div class="tile"><div class="k">Events</div><div class="v">${total}</div><div class="small muted">In this Kalamela</div></div>
-      <div class="tile"><div class="k">Sheets received</div><div class="v">${rec}<small> / ${total}</small></div><div class="bar"><i style="width:${pct(rec,total)}%"></i></div></div>
-      <div class="tile"><div class="k">Entries verified</div><div class="v">${verified}<small> / ${eligible}</small></div><div class="bar"><i style="width:${pct(verified,eligible)}%"></i></div></div>
-      <div class="tile"><div class="k">Ready to release</div><div class="v">${ready}<small> / ${total}</small></div><div class="small muted">${ties} tie${ties===1?'':'s'} need committee attention</div></div>
-    </div>
-    <section class="overview-section"><div class="section-heading"><div><h3>Quick actions</h3><p>Jump straight into the work that needs doing.</p></div></div><div class="quick-grid">${links.map(([id,title,desc])=>`<a class="quick-card" href="#${id}"><span class="quick-arrow" aria-hidden="true">↗</span><b>${esc(title)}</b><span>${esc(desc)}</span></a>`).join('')}</div></section>
-    ${can.tab() ? `<section class="overview-section"><div class="section-heading"><div><h3>Event readiness</h3><p>Live summary based on the current event lists.</p></div><a href="#control">Open control room →</a></div><div class="panel scroll"><table><thead><tr><th>Event</th><th>Group</th><th>Sheets</th><th>Progress</th><th>Status</th></tr></thead><tbody>${events.slice(0,8).map(e=>`<tr><td>${esc(e.ev)}</td><td>${esc(gl(e.grp))}</td><td>${e.intake?.rec?'Received':'Awaiting'}</td><td>${e.verc} / ${Math.max(0,e.n-(e.absent||0))} verified</td><td>${pill(e.status)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Event lists will appear here once they are built.</td></tr>'}</tbody></table></div></section>` : `<section class="overview-section"><h3>Scoreboard</h3><p class="muted">The latest published standings are available on the Scoreboard page.</p><a class="btn primary" href="#board">Open scoreboard</a></section>`}
+    <div class="vhead"><div><h2>Overview</h2><p>Event operations, progress and quick actions for <b>${esc(S.edition?.name || S.ed)}</b>.</p></div><div class="actions"><span class="phase ${esc(S.edition?.phase || "setup")}">${esc(phaseTxt)}</span><span class="small muted">Updates live</span></div></div>
+    ${stats}
+    <div class="ogrid${attnCard ? "" : " one"}">${liveCard}${attnCard}</div>
+    ${actions}
+    ${can.tab() ? `<section class="overview-section"><div class="section-heading"><h3 class="sec-h">Event readiness</h3><a href="#control">Open control room →</a></div><div class="panel scroll"><table><thead><tr><th>Event</th><th>Group</th><th>Sheets</th><th>Progress</th><th>Status</th></tr></thead><tbody>${events.slice(0, 8).map(e => `<tr><td>${esc(e.ev)}</td><td>${esc(gl(e.grp))}</td><td>${e.intake?.rec ? "Received" : "Awaiting"}</td><td>${e.verc} / ${Math.max(0, e.n - (e.absent || 0))} verified</td><td>${pill(e.status)}</td></tr>`).join("") || '<tr><td colspan="5" class="muted">Event lists will appear here once they are built.</td></tr>'}</tbody></table></div></section>` : ""}
   </div>`;
 }
 
@@ -331,10 +394,10 @@ function vEntry(view) {
   $("#prevEv").onclick = () => stepEntry(-1); $("#nextEv").onclick = () => stepEntry(1);
   const tb = $("#marksBody");
   tb.addEventListener("input", onMarkInput); tb.addEventListener("change", onMarkChange);
-  $("#markSearch").addEventListener("input", ev => { const q = ev.target.value.trim().toLowerCase(); let shown = 0; for (const tr of tb.rows) { const hit = !q || tr.textContent.toLowerCase().includes(q); tr.hidden = !hit; if (hit) shown++; } $("#markVisible").textContent = `${shown} of ${tb.rows.length} entries`; });
+  $("#markSearch").addEventListener("input", ev => { const q = ev.target.value.trim().toLowerCase(); let shown = 0; for (const tr of tb.rows) { const hit = !q || tr.cells[0].textContent.toLowerCase().includes(q); tr.hidden = !hit; if (hit) shown++; } $("#markVisible").textContent = `${shown} of ${tb.rows.length} entries`; });
   tb.addEventListener("keydown", ev => {
     if (ev.key !== "Enter" || !ev.target.classList.contains("mk")) return;
-    ev.preventDefault(); const all = $$("input.mk", tb).filter(i => !i.disabled), i = all.indexOf(ev.target), nx = all[i + (ev.shiftKey ? -1 : 1)];
+    ev.preventDefault(); const all = $$("input.mk", tb).filter(i => !i.disabled && !i.closest("tr").hidden), i = all.indexOf(ev.target), nx = all[i + (ev.shiftKey ? -1 : 1)];
     if (nx) { nx.focus(); nx.select(); }
   });
   refreshEntry();
@@ -528,7 +591,7 @@ function vSlip(view) {
     <div class="picker"><button class="btn" id="sPrev" aria-label="Previous event">‹</button><select class="sel" id="slipPick" aria-label="Event">${eventOptions(slipKey)}</select><button class="btn" id="sNext" aria-label="Next event">›</button></div>
     <article class="slip">
       <div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between">
-        <div><div class="ev">${esc(e.ev)}</div><div class="grp">${esc(gl(e.grp))} · ${esc(S.edition?.name || "")} Kalamela</div></div>${pill(e.status)}</div>
+        <div class="slip-id"><img class="slip-logo" src="img/kalamela-logo.png" alt="" width="52" height="52"><div><div class="ev">${esc(e.ev)}</div><div class="grp">${esc(gl(e.grp))} · ${esc(S.edition?.name || "")} Kalamela</div></div></div>${pill(e.status)}</div>
       ${e.status !== "Ready" ? `<div class="banner warn">Not final yet – do not announce. <small>${esc(e.status)}.</small></div>` : ""}
       <div class="lockbar noprint" id="lockBar"></div>
       <div>${rows.map(({ p, r, shared }) => `<div class="row"><div class="place ${placeClass(p)}">${p}${shared ? '<div class="small muted" style="font-family:var(--f-body);font-weight:500">shared</div>' : ""}</div>
@@ -617,7 +680,9 @@ function vAwards(view) {
       ${list.map(p => `<tr><td class="num">${esc(p.id)}</td><td>${esc(p.name)}<div class="small muted">${esc(p.wins.join(", "))}</div></td><td>${esc(p.centre)}</td><td class="c num"><b>${p.pts}</b></td></tr>`).join("") || '<tr><td colspan="4" class="muted">No points yet.</td></tr>'}
       </tbody></table></div>`;
   };
-  view.innerHTML = `<div class="view"><div class="vhead"><div><h2>Kalaprathibha &amp; Kalathilakam</h2><p>Highest individual-event points (team events not counted), minimum ${minPts} points.</p></div><div class="actions">${printBtn()}</div></div>
+  const noGender = S.R.people.filter(p => !p.gender && p.pts > 0);
+  const warn = noGender.length ? `<div class="banner warn" style="display:block"><b>${noGender.length} participant(s) with points have no gender</b> and are not counted for either award: chest ${noGender.map(p => esc(p.id)).join(", ")}. An admin sets it under Entries → Participants.</div>` : "";
+  view.innerHTML = `<div class="view">${warn}<div class="vhead"><div><h2>Kalaprathibha &amp; Kalathilakam</h2><p>Highest individual-event points (team events not counted), minimum ${minPts} points.</p></div><div class="actions">${printBtn()}</div></div>
     <div class="award">${card("Kalaprathibha (male)", "Male")}${card("Kalathilakam (female)", "Female")}</div></div>`;
   wirePrint(view);
 }

@@ -6,26 +6,34 @@
 <title>MDYS Kalamela</title>
 <meta name="description" content="Kalamela entries, tabulation and results for the Mar Thoma Yuvajana Sakhyam, Mumbai Diocese.">
 <meta name="robots" content="noindex">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect width='9' height='9' rx='2' fill='%23A30D35'/%3E%3Crect x='11' width='9' height='9' rx='2' fill='%23FDBE00'/%3E%3Crect y='11' width='9' height='9' rx='2' fill='%23077A74'/%3E%3Crect x='11' y='11' width='9' height='9' rx='2' fill='%23E5521A'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="img/favicon-64.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<meta name="theme-color" content="#7C0626">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
 <header class="top noprint">
-  <div class="wrap">
+  <div class="topbar">
+    <button class="menu-btn" id="menuBtn" type="button" aria-label="Open menu" aria-controls="tabs" aria-expanded="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
     <div class="brand">
-      <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="logo-badge"><img src="img/kalamela-logo.png" alt="Kalamela logo" width="40" height="40"></span>
       <div><h1 id="siteTitle">MDYS Kalamela</h1><div class="sub" id="siteSub">Mar Thoma Yuvajana Sakhyam · Mumbai Diocese</div></div>
-      <div class="who" id="who"></div>
     </div>
-    <nav class="tabs" id="tabs" aria-label="Screens" hidden></nav>
+    <div class="who" id="who"></div>
   </div>
 </header>
-<main class="wrap">
-  <div id="notice" class="noprint"></div>
-  <div id="view"><div class="empty"><b>Loading…</b></div></div>
-</main>
+<div class="shell" id="shell">
+  <nav class="side noprint" id="tabs" aria-label="Screens" hidden></nav>
+  <div class="scrim noprint" id="scrim" hidden></div>
+  <main class="content">
+    <div class="print-head printonly"><img src="img/kalamela-logo.png" alt="" width="56" height="56"><div><b id="printTitle">MDYS Kalamela</b><span id="printSub">Mar Thoma Yuvajana Sakhyam · Mumbai Diocese</span></div></div>
+    <div id="notice" class="noprint"></div>
+    <div id="view"><div class="empty"><b>Loading…</b></div></div>
+  </main>
+</div>
 <div id="toast" hidden></div>
 <script src="vendor/xlsx-0.20.3.full.min.js"></script>
 <script src="vendor/jszip-3.10.1.min.js"></script>

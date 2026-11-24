@@ -17,8 +17,8 @@ For setup and yearly use, read **ADMIN_GUIDE.md** first. This file is for whoeve
 | `js/db.js` | Every Firebase call (sign-in, live data, saves). Screens never call Firebase directly |
 | `js/app.js` | App shell, roles, navigation and the tabulation/results screens |
 | `js/admin.js` | Centre forms, participants and admit cards, rules editor, years, team & roles, backup & audit |
-| `js/importer.js` | Reads a Centre's Excel form (entries, teams, photos) and checks it against the year's rules |
 | `js/stage.js` | Schedule screen (stages/rooms, running order, planned times), Stage screen for stage managers, and the data published for participants |
+| `js/importer.js` | Reads a Centre's Excel form: the Centre registration form (sheets "Individuals Group I/II", one sheet per team, "Declaration") or the website's own entry form; checks it against the rules; extracts photos |
 | `js/autoplan.js` | Auto-plan: builds a schedule from the event lists (no participant clashes; First → Middle → Last on every stage; lunch; buffers). Pure functions, no screen or database |
 | `me.html`, `js/me.js` | "My Kalamela": public page for participants (no sign-in) – their events, stages, times, live stage progress and where to go next |
 | `js/compute.js` | Pure result maths: final scores, ranks, ties, status, points, championship |
@@ -93,5 +93,21 @@ For small changes (renaming an event), unprotect the sheet in Excel (Review → 
 - Added a prominent live/next event focus panel and stage completion progress for stage managers.
 - Refreshed My Kalamela for mobile use, including clearer participant lookup, event cards and a Change number action.
 - No Firestore schema, collection, security rule or Firebase configuration changes are included.
+
+## Design refresh (November 2026, from the design template board)
+- **Layout:** maroon top bar (crest, Edition picker, signed-in person and role) and a left sidebar grouped under Entries, Tabulation, Results and Settings, with Overview on top. On phones and tablets (960px and narrower) the sidebar opens from the ☰ button; Escape or tapping outside closes it. Stage managers have one screen, so they get no sidebar.
+- **Logo:** the Kalamela logo (`img/kalamela-logo.png`) appears in the top bar, the sign-in screen, the browser tab and home-screen icons, My Kalamela, the result slip, the header of every printed page, and the admit card PDF (from `js/logo.js`). To change the logo, replace these files: `img/kalamela-logo.png` (512×512), `img/favicon-32.png`, `img/favicon-64.png`, `img/apple-touch-icon.png` (180×180) and `js/logo.js`.
+- **Colours** come from the logo:
+  - **Maroon** `#A60934` is the main colour: buttons, links and highlights. The top bar is a deeper shade (`#7C0626`) so the logo stands out.
+  - **Yellow** `#FFBE02`, **teal** `#038883` and **orange** `#FC5717` are accents: the four-colour band under the top bar, one colour per sidebar area and per Overview card, and 1st / 2nd / 3rd places in maroon / teal / orange.
+  - Status colours (green done, blue to verify, amber waiting, red attention or live) stay separate from the logo colours, so a yellow card never reads as a warning.
+- **Type:** Inter for text, IBM Plex Mono for chest numbers and marks. Dark mode follows the device setting.
+- **Overview:**
+  - Four cards: participants in individual events, events and planned stages, results finalised (locked), and centres.
+  - **Live operations**, from the Stage screens: what is on each stage, how many entries are marked present or absent, and what's next.
+  - **Needs attention**, for tabulators: sheets received but not entered, marks missing, events waiting for verification, ties, and, on the Kalamela day only, events still not started 15 minutes after their planned time. Each line opens the screen that fixes it.
+  - **Quick actions**, showing only the screens your role can open.
+- **My Kalamela:** "Participant portal" header, chest-number search, an **Up next** card with a countdown on the day ("In 1h 6m"), and an event list with status icons. It still shows no names, dates of birth, phone numbers or photos.
+- Presentation only: no change to Firestore data, rules, roles, scoring, autosave, verification or locks. The notifications bell on the design board is not included because there is no notifications feature behind it.
 
 See `UX_QA_CHECKLIST.md` for the required role and workflow checks before deployment.
