@@ -98,22 +98,15 @@ People sign in with their own Google (Gmail) account. Add the exact Gmail addres
 - **Years → Start a new year**, copying the rules from last year.
 - **Rules**: check the date, venue, age groups (birth-date cut-offs move by one year every year), fees, points, events and judging criteria against the latest Kalamela Manual. Save.
 - **Team & roles**: add this year's admins, chief tabulator and tabulation team.
-- **The Centre form**: the website reads two kinds of form.
-  - The **Centre registration form** (the one sent to Centres in 2026–27, based on last year's form): sheets "Individuals Group I", "Individuals Group II", one sheet per team ("Group Song Team 1", "Mime 2"…) and "Declaration". The "Individuals …" sheet names must match the age-group names on the Rules screen. Event names are matched loosely (e.g. "Solo Malayalam Female" = "Solo Malayalam (Female)").
-  - The website's own entry form in `templates/`.
-  - If the Manual adds or renames events, update the form's event names too.
+- **The Centre entry form**: the file in `templates/` is the 2026–27 form. Its event names and its "Group I" / "Group II" sheet names must match the Rules screen exactly. If the Manual adds, removes or renames events, the form needs updating; see README.md, "Changing the Centre entry form".
 
 **2. Entries (Oct–Nov)**
 - Send the Centre entry form to every Centre with the notice.
 - As forms arrive: **Centre forms → Upload**. Read the issues listed for each Centre, ask the Centre to fix and resend, and upload again; the new upload replaces the old one.
-  - The registration form has **no gender column**. Gender comes from the solo songs (Male/Female) and Margamkali (girls), and from **(M)** or **(F)** written after a name (e.g. "Anna Mathew (F)"). Kalaprathibha / Kalathilakam need everyone's gender, so either ask Centres to add (M)/(F) after each name, or set it under **Entries → Participants** (see step 3).
-  - Fees: the website counts the Shakha Vihitham from **"Total number of Shakhas"** on the form's Declaration, even where the form itself shows Rs. 0 for it.
-  - Photos: a photo belongs to the row its top-left corner is on. If two photos land on one row, the issues list says so: check that Centre's photos.
 - Record fees received in the **Paid** column.
 
 **3. After the entry deadline**
 - **Centre forms → Build event lists and chest numbers.** Chest numbers start at 1001 (Group I) and 2001 (Group II). Building again later keeps the numbers already given.
-- **Entries → Participants & admit cards**: if a yellow box says some participants have no gender, click **Show only these** and choose Male or Female for each (admins, while the year is being set up). It is saved at once and used in the results; no rebuild needed. A gender set here is kept if the Centre's form is uploaded again.
 - **Entries → Participants & admit cards → Download admit cards (PDF).** You get 8 cards per A4 page, ready to print and cut. Each card has the Kalamela name, date and venue, the photo, chest number, group and events, but no name, Sakha or Centre. To print one Centre's cards, type the Centre's name in the search box first, then download. Print **Event lists** for stage managers.
 - **Settings → Schedule → Auto-plan**: set the options and press **Auto-plan the schedule**. It fills in the stages and rooms, the running order and the planned times from the event lists. Nobody is put in two events at the same time (team members included).
   - **Stages available**: the most stages you can run at once. **Rooms**: halls for written and drawing events (0 = run them on the stages).
@@ -181,8 +174,6 @@ Rules used: Final score = (Judge I + Judge II) ÷ 2 (one judge for Quiz unless t
 | A participant's page says "schedule hasn't been published" | Open **Settings → Schedule** and click **Save and publish**. |
 | A participant's page says "No events found" | Check the chest number on the admit card. If the Centre's form was changed, rebuild the event lists, then **Save and publish** the schedule again. |
 | "Schedule saved … but the Auto-plan settings were not saved" | The security rules on Firebase are older than the website. Publish the current `firestore.rules` (Part A, step A5). The schedule itself was saved. |
-| A Centre's file says "not a Kalamela Centre entry form" | The Centre changed sheet names, or sent a different file. Ask for the original registration form, filled in, without renaming sheets. |
-| "Prathibha & Thilakam" says some participants with points have no gender | Set their gender under **Entries → Participants** before the year goes live. After going live it can't be changed. |
 | A stage manager sees "No schedule yet" | The schedule hasn't been saved. An admin opens **Settings → Schedule**. |
 | Marks boxes are grey and the screen says "Results announced" | That event was locked after announcement. Only the chief tabulator can unlock it, on the Result slip. |
 | Entire site down, or the internet is gone for good | Use the latest **Excel backup** as a paper/Excel fallback and carry on by hand. Enter the marks later. |

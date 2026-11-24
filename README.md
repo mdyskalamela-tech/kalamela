@@ -17,8 +17,8 @@ For setup and yearly use, read **ADMIN_GUIDE.md** first. This file is for whoeve
 | `js/db.js` | Every Firebase call (sign-in, live data, saves). Screens never call Firebase directly |
 | `js/app.js` | App shell, roles, navigation and the tabulation/results screens |
 | `js/admin.js` | Centre forms, participants and admit cards, rules editor, years, team & roles, backup & audit |
+| `js/importer.js` | Reads a Centre's Excel form (entries, teams, photos) and checks it against the year's rules |
 | `js/stage.js` | Schedule screen (stages/rooms, running order, planned times), Stage screen for stage managers, and the data published for participants |
-| `js/importer.js` | Reads a Centre's Excel form: the Centre registration form (sheets "Individuals Group I/II", one sheet per team, "Declaration") or the website's own entry form; checks it against the rules; extracts photos |
 | `js/autoplan.js` | Auto-plan: builds a schedule from the event lists (no participant clashes; First → Middle → Last on every stage; lunch; buffers). Pure functions, no screen or database |
 | `me.html`, `js/me.js` | "My Kalamela": public page for participants (no sign-in) – their events, stages, times, live stage progress and where to go next |
 | `js/compute.js` | Pure result maths: final scores, ranks, ties, status, points, championship |

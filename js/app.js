@@ -331,10 +331,10 @@ function vEntry(view) {
   $("#prevEv").onclick = () => stepEntry(-1); $("#nextEv").onclick = () => stepEntry(1);
   const tb = $("#marksBody");
   tb.addEventListener("input", onMarkInput); tb.addEventListener("change", onMarkChange);
-  $("#markSearch").addEventListener("input", ev => { const q = ev.target.value.trim().toLowerCase(); let shown = 0; for (const tr of tb.rows) { const hit = !q || tr.cells[0].textContent.toLowerCase().includes(q); tr.hidden = !hit; if (hit) shown++; } $("#markVisible").textContent = `${shown} of ${tb.rows.length} entries`; });
+  $("#markSearch").addEventListener("input", ev => { const q = ev.target.value.trim().toLowerCase(); let shown = 0; for (const tr of tb.rows) { const hit = !q || tr.textContent.toLowerCase().includes(q); tr.hidden = !hit; if (hit) shown++; } $("#markVisible").textContent = `${shown} of ${tb.rows.length} entries`; });
   tb.addEventListener("keydown", ev => {
     if (ev.key !== "Enter" || !ev.target.classList.contains("mk")) return;
-    ev.preventDefault(); const all = $$("input.mk", tb).filter(i => !i.disabled && !i.closest("tr").hidden), i = all.indexOf(ev.target), nx = all[i + (ev.shiftKey ? -1 : 1)];
+    ev.preventDefault(); const all = $$("input.mk", tb).filter(i => !i.disabled), i = all.indexOf(ev.target), nx = all[i + (ev.shiftKey ? -1 : 1)];
     if (nx) { nx.focus(); nx.select(); }
   });
   refreshEntry();
@@ -617,9 +617,7 @@ function vAwards(view) {
       ${list.map(p => `<tr><td class="num">${esc(p.id)}</td><td>${esc(p.name)}<div class="small muted">${esc(p.wins.join(", "))}</div></td><td>${esc(p.centre)}</td><td class="c num"><b>${p.pts}</b></td></tr>`).join("") || '<tr><td colspan="4" class="muted">No points yet.</td></tr>'}
       </tbody></table></div>`;
   };
-  const noGender = S.R.people.filter(p => !p.gender && p.pts > 0);
-  const warn = noGender.length ? `<div class="banner warn" style="display:block"><b>${noGender.length} participant(s) with points have no gender</b> and are not counted for either award: chest ${noGender.map(p => esc(p.id)).join(", ")}. An admin sets it under Entries → Participants.</div>` : "";
-  view.innerHTML = `<div class="view">${warn}<div class="vhead"><div><h2>Kalaprathibha &amp; Kalathilakam</h2><p>Highest individual-event points (team events not counted), minimum ${minPts} points.</p></div><div class="actions">${printBtn()}</div></div>
+  view.innerHTML = `<div class="view"><div class="vhead"><div><h2>Kalaprathibha &amp; Kalathilakam</h2><p>Highest individual-event points (team events not counted), minimum ${minPts} points.</p></div><div class="actions">${printBtn()}</div></div>
     <div class="award">${card("Kalaprathibha (male)", "Male")}${card("Kalathilakam (female)", "Female")}</div></div>`;
   wirePrint(view);
 }
