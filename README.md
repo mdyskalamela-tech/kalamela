@@ -17,8 +17,8 @@ For setup and yearly use, read **ADMIN_GUIDE.md** first. This file is for whoeve
 | `js/db.js` | Every Firebase call (sign-in, live data, saves). Screens never call Firebase directly |
 | `js/app.js` | App shell, roles, navigation and the tabulation/results screens |
 | `js/admin.js` | Centre forms, participants and admit cards, rules editor, years, team & roles, backup & audit |
-| `js/importer.js` | Reads a Centre's Excel form (entries, teams, photos) and checks it against the year's rules |
 | `js/stage.js` | Schedule screen (stages/rooms, running order, planned times), Stage screen for stage managers, and the data published for participants |
+| `js/importer.js` | Reads a Centre's Excel form: the Centre registration form (sheets "Individuals Group I/II", one sheet per team, "Declaration") or the website's own entry form; checks it against the rules; extracts photos |
 | `js/autoplan.js` | Auto-plan: builds a schedule from the event lists (no participant clashes; First → Middle → Last on every stage; lunch; buffers). Pure functions, no screen or database |
 | `me.html`, `js/me.js` | "My Kalamela": public page for participants (no sign-in) – their events, stages, times, live stage progress and where to go next |
 | `js/compute.js` | Pure result maths: final scores, ranks, ties, status, points, championship |
@@ -85,3 +85,13 @@ The importer reads the form by position, so the form and the Rules screen must a
 - event names must match the Rules screen exactly.
 
 For small changes (renaming an event), unprotect the sheet in Excel (Review → Unprotect Sheet; there's no password) and edit the event names. For larger changes, edit the event list at the top of `tools/build_centre_form.py` and run `python build_centre_form.py` (needs `pip install openpyxl`).
+
+## UX refresh (November 2026)
+- Added a role-aware Overview landing screen with operational counts, event readiness and shortcuts.
+- Refined navigation, spacing, cards, controls and responsive layouts using the existing colour and typography tokens.
+- Added participant search to Marks entry without changing scoring, autosave, verification or locking logic.
+- Added a prominent live/next event focus panel and stage completion progress for stage managers.
+- Refreshed My Kalamela for mobile use, including clearer participant lookup, event cards and a Change number action.
+- No Firestore schema, collection, security rule or Firebase configuration changes are included.
+
+See `UX_QA_CHECKLIST.md` for the required role and workflow checks before deployment.

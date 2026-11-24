@@ -60,12 +60,13 @@ function draw() {
       <div class="go">Go to <b>${esc(where(next))}</b>${next.start ? ` · planned ${esc(next.start)}` : ""}</div>
       <div class="muted">${stages.get(next.stage) ? (n === 0 ? "Yours is the next event there – please be ready." : `${n} event${n > 1 ? "s" : ""} before yours on this stage.`) + (cur ? ` Now on: ${esc(cur.ev)} (${esc(cur.grp)}).` : "") : "The stage will be announced."}</div></div>`;
   }
-  out.innerHTML = `<p style="margin:0">Chest number <span class="chestbig">${esc(chest)}</span> · ${evs.length} event${evs.length === 1 ? "" : "s"}</p>${top}
-    <h3 style="font-size:16px;margin:6px 0 0">All your events</h3>
+  out.innerHTML = `<div class="me-section-title"><p style="margin:0">Chest number <span class="chestbig">${esc(chest)}</span> · ${evs.length} event${evs.length === 1 ? "" : "s"}</p><button class="btn" id="changeChest" type="button">Change number</button></div>${top}
+    <div class="me-section-title"><h3>My event schedule</h3><span class="small muted">Updates live</span></div>
     ${evs.map(i => { const s = stOf(i.key); return `<div class="evrow ${s}"><div><div class="t">${esc(i.ev)} <span class="muted">· ${esc(i.grp)}</span></div>
       <div class="s"><b>${esc(where(i))}</b>${i.start ? " · planned " + esc(i.start) : ""}</div></div>
       <span class="pill ${s === "active" ? "s-ready" : s === "done" ? "s-locked" : "s-awaiting"}">${s === "active" ? "On stage now" : s === "done" ? "Completed" : "Upcoming"}</span></div>`; }).join("")}
     <p class="small muted">Times are planned times; stages can run early or late, so keep this page open. Stage and order are set by the Kalamela team.</p>`;
+  const change = $("#changeChest"); if (change) change.onclick = () => { mine = null; chest = ""; out.innerHTML = ""; $("#chest").value = ""; $("#chest").focus(); };
 }
 $("#f").onsubmit = e => { e.preventDefault(); const c = $("#chest").value.trim(); if (!/^\d{1,6}$/.test(c)) return msg("Type the chest number (digits only) from your admit card.", "warn"); if (ed) look(c); };
 window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (/^\d{1,6}$/.test(h) && h !== chest && ed) { $("#chest").value = h; look(h); } });

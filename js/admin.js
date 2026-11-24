@@ -45,7 +45,7 @@ export function vCentres(view, ctx) {
     $("#pending").innerHTML = pending.map((r, i) => r.error
       ? `<div class="banner bad">${esc(r.file)}: ${esc(r.error)} <button class="btn" data-drop="${i}">Dismiss</button></div>`
       : `<div class="evcard"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">
-          <div><b>${esc(r.centre.name)}</b> <span class="muted small">${esc(r.centre.file)}</span><div class="small muted">${r.people.length} people · ${r.entries.length} individual entries · ${r.teams.length} teams · ${r.people.filter(p => p.photo).length} photos · Sakhas: ${esc(r.centre.sakhas.join(", "))}</div></div>
+          <div><b>${esc(r.centre.name)}</b> <span class="muted small">${esc(r.centre.file)}</span><div class="small muted">${r.people.length} people · ${r.entries.length} individual entries · ${r.teams.length} teams · ${r.people.filter(p => p.photo).length} photos · ${r.centre.sakhaCount ? `Shakhas in the Centre: ${r.centre.sakhaCount} · ` : ""}Sakhas: ${esc(r.centre.sakhas.join(", "))}</div></div>
           <div style="display:flex;gap:8px"><button class="btn primary" data-save="${i}" ${setup ? "" : "disabled"}>Save ${esc(r.centre.name)}</button><button class="btn" data-drop="${i}">Discard</button></div></div>
         ${r.issues.length ? `<div class="issues">${r.issues.map(x => `<div class="${x.sheet === "Photos" ? "photo" : ""}">${esc(x.sheet)}${x.row ? " row " + esc(x.row) : ""}: ${esc(x.msg)}</div>`).join("")}</div>
           <p class="small muted">${r.issues.length} issue(s). You can still save; ask the Centre to fix the form and upload it again.</p>` : `<div class="banner ok small">No problems found.</div>`}</div>`).join("");
@@ -63,7 +63,8 @@ export function vCentres(view, ctx) {
   }
   function drawTable() {
     const cs = [...S.centres.entries()].map(([id, c]) => [id, { ...c, __id: id }]).sort((a, b) => a[1].name.localeCompare(b[1].name)), fees = cfg().fees || {};
-    const due = c => (c.entries?.length || 0) * (fees.individual || 0) + (c.teams?.length || 0) * (fees.team || 0) + (c.sakhas?.length || 0) * (fees.sakha || 0);
+    const sakhasOf = c => (c.sakhaCount != null && c.sakhaCount > 0 ? c.sakhaCount : (c.sakhas?.length || 0));   // registration form: "Total number of Shakhas" on its Declaration
+    const due = c => (c.entries?.length || 0) * (fees.individual || 0) + (c.teams?.length || 0) * (fees.team || 0) + sakhasOf(c) * (fees.sakha || 0);
     const tot = cs.reduce((a, [, c]) => ({ p: a.p + (c.counts?.people || 0), e: a.e + (c.entries?.length || 0), t: a.t + (c.teams?.length || 0), f: a.f + (c.food?.total || 0), d: a.d + due(c), paid: a.paid + Number(S.payments.get(c.__id)?.amount || 0) }), { p: 0, e: 0, t: 0, f: 0, d: 0, paid: 0 });
     const el = $("#centresTable"); if (!el) return;
     if (!cs.length) { el.innerHTML = `<p>No Centre forms saved yet.</p>`; return; }
@@ -116,7 +117,7 @@ export async function centreDocs(r, existing, thumb) {
     const pid = `${cid}~${slug(p.name)}~${p.dob || "nodob"}`; pidOf[p.key] = pid;
     const old = existing.get(pid);
     const photo = p.photo && thumb ? await thumb(p.photo.data, p.photo.ext) : (old && old.photo) || "";
-    participants.push({ pid, centreId: cid, centre: r.centre.name, name: p.name, gender: p.gender, dob: p.dob, group: p.group, sakha: p.sakha,
+    participants.push({ pid, centreId: cid, centre: r.centre.name, name: p.name, gender: p.gender || (old && old.gender) || "", dob: p.dob, group: p.group, sakha: p.sakha,
       membership: p.membership, phone: p.phone, photo, ...(old && old.chest ? { chest: old.chest } : {}),
       events: r.entries.filter(e => e.pkey === p.key).map(e => e.event), teams: r.teams.filter(t => t.members.some(m => m.pkey === p.key)).map(t => t.event) });
   }
@@ -167,21 +168,28 @@ export function buildLists(config, centres, participants) {
 }
 
 // ================================================================ PARTICIPANTS & ADMIT CARDS
-let peopleFilter = "", peopleCards = false;
+let peopleFilter = "", peopleCards = false, onlyNoGender = false;
 export function vPeople(view, ctx) {
-  const { S, gl } = ctx; ctx.watchPeople();
+  const { S, gl, D } = ctx; ctx.watchPeople();
+  const canSetGender = ctx.can.admin() && ctx.phase() === "setup";
   const draw = () => {
     const q = peopleFilter.toLowerCase();
-    const list = [...S.participants.values()].filter(p => !q || [p.name, p.centre, p.sakha, String(p.chest || "")].some(x => String(x || "").toLowerCase().includes(q)))
+    const needGender = p => !p.gender && (p.events || []).length;   // gender matters for Kalaprathibha / Kalathilakam (individual events)
+    const list = [...S.participants.values()].filter(p => (!q || [p.name, p.centre, p.sakha, String(p.chest || "")].some(x => String(x || "").toLowerCase().includes(q))) && (!onlyNoGender || needGender(p)))
       .sort((a, b) => (Number(a.chest) || 99999) - (Number(b.chest) || 99999) || a.name.localeCompare(b.name));
     const body = $("#peopleBody"); if (!body) return;
+    const missing = [...S.participants.values()].filter(needGender).length;
     $("#peopleCount").textContent = `${list.length} of ${S.participants.size}`;
+    $("#genderBox").innerHTML = missing ? `<div class="banner warn" style="display:block"><b>${missing} participant(s) in individual events have no gender.</b> The Centre registration form has no gender column (only solo songs and Margamkali show it). Kalaprathibha (male) and Kalathilakam (female) need it: set it in the table${canSetGender ? "" : " (admins, while the year is being set up)"}.
+        <button class="btn" id="onlyNoGender" style="margin-left:8px">${onlyNoGender ? "Show everyone" : "Show only these"}</button></div>`
+      : onlyNoGender ? `<div class="banner ok">Everyone in individual events has a gender. <button class="btn" id="onlyNoGender">Show everyone</button></div>` : "";
+    const og = $("#onlyNoGender"); if (og) og.onclick = () => { onlyNoGender = !onlyNoGender; if (onlyNoGender) peopleCards = false; draw(); };
     body.innerHTML = peopleCards
       ? `<div class="admit">${list.map(p => `<div class="card-admit">${p.photo ? `<img src="${esc(p.photo)}" alt="Photo, chest ${esc(p.chest || "")}">` : '<div class="nophoto">No photo</div>'}
           <div><div class="ch">${esc(p.chest || "—")}</div>
           <ul class="evs">${[...(p.events || []).map(e => `<li>${esc(e)}</li>`), ...(p.teams || []).map(t => `<li>${esc(t)} <span class="muted">(team)</span></li>`)].join("")}</ul></div></div>`).join("")}</div>`
       : `<div class="panel scroll"><table><thead><tr><th>Photo</th><th>Chest</th><th>Name</th><th>Group</th><th>Date of birth</th><th>Sakha</th><th>Centre</th><th>Events</th><th>Phone</th></tr></thead><tbody>
-          ${list.map(p => `<tr><td>${p.photo ? `<img class="thumb" src="${esc(p.photo)}" alt="">` : '<span class="chip bad">none</span>'}</td><td class="num"><b>${esc(p.chest || "—")}</b></td><td>${esc(p.name)}<div class="small muted">${esc(p.gender)}</div></td><td>${esc(gl(p.group))}</td><td class="num small">${esc(fmtDate(p.dob))}</td><td>${esc(p.sakha)}</td><td>${esc(p.centre)}</td><td class="small">${esc([...(p.events || []), ...(p.teams || []).map(t => t + " (team)")].join(", "))}</td><td class="num small">${esc(p.phone || "")}</td></tr>`).join("") || '<tr><td colspan="9" class="muted">No participants yet. Import Centre forms first.</td></tr>'}
+          ${list.map(p => `<tr><td>${p.photo ? `<img class="thumb" src="${esc(p.photo)}" alt="">` : '<span class="chip bad">none</span>'}</td><td class="num"><b>${esc(p.chest || "—")}</b></td><td>${esc(p.name)}<div class="small muted">${canSetGender ? `<select class="in" data-gender="${esc(p.pid)}" aria-label="Gender of ${esc(p.name)}" style="padding:1px 4px">${["", "Male", "Female"].map(g => `<option value="${g}" ${(p.gender || "") === g ? "selected" : ""}>${g || "Gender?"}</option>`).join("")}</select>` : esc(p.gender) || '<span class="chip bad">gender?</span>'}</div></td><td>${esc(gl(p.group))}</td><td class="num small">${esc(fmtDate(p.dob))}</td><td>${esc(p.sakha)}</td><td>${esc(p.centre)}</td><td class="small">${esc([...(p.events || []), ...(p.teams || []).map(t => t + " (team)")].join(", "))}</td><td class="num small">${esc(p.phone || "")}</td></tr>`).join("") || '<tr><td colspan="9" class="muted">No participants yet. Import Centre forms first.</td></tr>'}
         </tbody></table></div>`;
   };
   view.dataset.keep = "1";
@@ -189,6 +197,7 @@ export function vPeople(view, ctx) {
     <div class="vhead"><div><h2>Participants</h2><p>Everyone from the saved Centre forms, with photos and chest numbers. Switch to admit cards to print them (about 9 per A4 page). Admit cards show only the photo, chest number and events: no name, Sakha or Centre.</p></div>
       <div class="actions"><button class="btn" id="toggleCards">${peopleCards ? "Show table" : "Show admit cards"}</button><button class="btn" data-print>Print</button><button class="btn primary" id="dlCards">Download admit cards (PDF)</button><button class="btn" id="dlPeople">Download (.xlsx)</button></div></div>
     <div class="picker"><input class="txt" id="pq" placeholder="Search name, chest, Sakha or Centre" value="${esc(peopleFilter)}" style="flex:1 1 260px;max-width:420px"><span class="muted" id="peopleCount"></span></div>
+    <div id="genderBox"></div>
     <div id="peopleBody"></div></div>`;
   $("#pq").oninput = e => { peopleFilter = e.target.value; draw(); };
   $("#toggleCards").onclick = () => { peopleCards = !peopleCards; $("#toggleCards").textContent = peopleCards ? "Show table" : "Show admit cards"; draw(); };
@@ -207,6 +216,24 @@ export function vPeople(view, ctx) {
   };
   $("#dlPeople").onclick = () => downloadXlsx(`Kalamela_${S.ed}_Participants.xlsx`, [{ name: "Participants", rows: [["Chest", "Name", "Gender", "Date of birth", "Group", "Sakha", "Centre", "Membership", "Phone", "Events", "Team events", "Photo"],
     ...[...S.participants.values()].sort((a, b) => (a.chest || 99999) - (b.chest || 99999)).map(p => [p.chest || "", p.name, p.gender, fmtDate(p.dob), gl(p.group), p.sakha, p.centre, p.membership, p.phone, (p.events || []).join(", "), (p.teams || []).join(", "), p.photo ? "Yes" : "No"])] }]);
+  // Set a participant's gender (and in the event lists, so results use it without rebuilding)
+  view.onchange = async e => {
+    const sel = e.target.closest("[data-gender]"); if (!sel || view.dataset.v !== "people") return;
+    const p = S.participants.get(sel.dataset.gender); if (!p) return;
+    const gender = sel.value; sel.disabled = true;
+    try {
+      await D.updateParticipant(S.ed, p.pid, { gender });
+      const changed = [];
+      for (const L of S.lists.values()) {
+        if (!(L.entries || []).some(x => x.pid === p.pid)) continue;
+        changed.push({ ...L, entries: L.entries.map(x => (x.pid === p.pid ? { ...x, gender } : x)) });
+      }
+      if (changed.length) await D.writeBuild(S.ed, [], changed, []);
+      D.logAdmin(S.ed, "gender", `${p.name} (${p.centre}): ${gender || "cleared"}`);
+      toast(`${p.name}: ${gender || "gender cleared"}`);
+    } catch (err) { fail(err); sel.value = p.gender || ""; }
+    sel.disabled = false;
+  };
   view._refresh = draw; draw();
 }
 
