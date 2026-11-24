@@ -7,11 +7,13 @@ import { $, $$, esc, fmt, isNum, parseMark, toast, pill, placeClass, enqueue, do
 import { DEFAULT_CONFIG } from "./defaults.js";
 import { SITE_NAME, ORG_NAME } from "./config.js";
 import * as Admin from "./admin.js";
+import * as Stage from "./stage.js";
 
 // ---------------------------------------------------------------- state
 export const S = {
   user: null, role: "", editions: [], ed: null, edition: null,
   lists: new Map(), marks: new Map(), intake: new Map(), decisions: new Map(), locks: new Map(),
+  plan: null, status: new Map(), att: new Map(),   // schedule, live stage progress, stage attendance
   centres: new Map(), participants: new Map(), payments: new Map(),
   loaded: {}, R: null, edUnsubs: [], peopleWatched: false,
 };
@@ -28,6 +30,7 @@ export const can = {
   admin: () => S.role === "admin",
   chief: () => ["admin", "chief"].includes(S.role),
   tab: () => ["admin", "chief", "tabulator"].includes(S.role),
+  stage: () => ["admin", "chief", "tabulator", "stage"].includes(S.role),
 };
 const archived = () => phase() === "archived";
 const writableMarks = () => can.tab() && !archived();
@@ -35,29 +38,48 @@ export const gl = code => groupLabel(cfg(), code);
 
 // ---------------------------------------------------------------- screens
 const ALL = ["admin", "chief", "tabulator", "viewer"], TAB = ["admin", "chief", "tabulator"], CHIEF = ["admin", "chief"], ADM = ["admin"];
-const VIEWS = [
-  { id: "control", label: "Control", grp: "Tabulation", roles: TAB, fn: vControl },
-  { id: "entry", label: "Marks entry", roles: TAB, fn: vEntry },
-  { id: "results", label: "Results & ties", roles: ALL, fn: vResults },
-  { id: "slip", label: "Result slip", grp: "Results", roles: ALL, fn: vSlip },
-  { id: "all", label: "All results", roles: ALL, fn: vAll },
-  { id: "board", label: "Scoreboard", roles: ALL, fn: vBoard },
-  { id: "awards", label: "Prathibha & Thilakam", roles: ALL, fn: vAwards },
-  { id: "lists", label: "Event lists", grp: "Print", roles: ALL, fn: vLists },
-  { id: "certs", label: "Certificates", roles: ALL, fn: vCerts },
-  { id: "kendra", label: "Kendra list", roles: ALL, fn: vKendra },
-  { id: "centres", label: "Centre forms", grp: "Admin", roles: ADM, fn: v => Admin.vCentres(v, ctx) },
-  { id: "people", label: "Participants", roles: CHIEF, fn: v => Admin.vPeople(v, ctx) },
-  { id: "rules", label: "Rules", roles: ADM, fn: v => Admin.vRules(v, ctx) },
-  { id: "years", label: "Years", roles: ADM, fn: v => Admin.vYears(v, ctx) },
-  { id: "team", label: "Team & roles", roles: ADM, fn: v => Admin.vTeam(v, ctx) },
-  { id: "backup", label: "Backup & audit", roles: CHIEF, fn: v => Admin.vBackup(v, ctx) },
+const STG = ["admin", "chief", "tabulator", "stage"];   // stage managers see only their Stage screen
+// Screens are grouped into four areas that follow the year: entries before the day, tabulation on the day,
+// results after, settings any time. The top row shows the areas; the second row shows the current area's screens.
+const AREAS = [
+  { id: "entries", label: "Entries", hint: "Centre forms, participants, event lists" },
+  { id: "tabulation", label: "Tabulation", hint: "On the day: intake, marks, ties" },
+  { id: "results", label: "Results", hint: "Slips, scoreboard, certificates" },
+  { id: "settings", label: "Settings", hint: "Rules, years, team, backup" },
 ];
+const VIEWS = [
+  { id: "centres", label: "Centre forms", area: "entries", roles: ADM, fn: v => Admin.vCentres(v, ctx) },
+  { id: "people", label: "Participants & admit cards", area: "entries", roles: CHIEF, fn: v => Admin.vPeople(v, ctx) },
+  { id: "lists", label: "Event lists", area: "entries", roles: TAB, fn: vLists },
+  { id: "control", label: "Control", area: "tabulation", roles: TAB, fn: vControl },
+  { id: "stage", label: "Stage", area: "tabulation", roles: STG, fn: v => Stage.vStage(v, ctx) },
+  { id: "entry", label: "Marks entry", area: "tabulation", roles: TAB, fn: vEntry },
+  { id: "results", label: "Results & ties", area: "tabulation", roles: TAB, fn: vResults },
+  { id: "slip", label: "Result slip", area: "results", roles: ALL, fn: vSlip },
+  { id: "all", label: "All results", area: "results", roles: ALL, fn: vAll },
+  { id: "board", label: "Scoreboard", area: "results", roles: ALL, fn: vBoard },
+  { id: "awards", label: "Prathibha & Thilakam", area: "results", roles: ALL, fn: vAwards },
+  { id: "certs", label: "Certificates", area: "results", roles: ALL, fn: vCerts },
+  { id: "kendra", label: "Kendra list", area: "results", roles: ALL, fn: vKendra },
+  { id: "rules", label: "Rules", area: "settings", roles: ADM, fn: v => Admin.vRules(v, ctx) },
+  { id: "schedule", label: "Schedule", area: "settings", roles: ADM, fn: v => Stage.vSchedule(v, ctx) },
+  { id: "years", label: "Years", area: "settings", roles: ADM, fn: v => Admin.vYears(v, ctx) },
+  { id: "team", label: "Team & roles", area: "settings", roles: ADM, fn: v => Admin.vTeam(v, ctx) },
+  { id: "backup", label: "Backup & audit", area: "settings", roles: CHIEF, fn: v => Admin.vBackup(v, ctx) },
+];
+const lastInArea = {};   // remembers the screen last opened in each area
 const myViews = () => VIEWS.filter(v => v.roles.includes(S.role));
 function viewId() {
   const h = location.hash.replace("#", ""); const mine = myViews();
   if (mine.some(v => v.id === h)) return h;
-  return can.tab() ? "control" : "board";
+  return homeView();
+}
+/** Where each person starts: admins prepare entries while the year is being set up; on the day everyone starts in tabulation. */
+function homeView() {
+  if (S.role === "stage") return "stage";
+  if (can.admin() && phase() === "setup") return "centres";
+  if (can.tab()) return "control";
+  return "board";
 }
 // context handed to admin.js
 const ctx = { S, cfg, phase, can, gl, D, renderAll: () => renderAll(), recompute: () => compute(), watchPeople: () => watchPeople() };
@@ -99,7 +121,7 @@ function showNoAccess() {
   $("#so").onclick = () => D.signOutUser();
 }
 function whoBar() {
-  const roleName = { admin: "Admin", chief: "Chief tabulator", tabulator: "Tabulator", viewer: "Viewer" }[S.role] || "No access";
+  const roleName = { admin: "Admin", chief: "Chief tabulator", tabulator: "Tabulator", stage: "Stage manager", viewer: "Viewer" }[S.role] || "No access";
   const eds = [...S.editions].sort((a, b) => b.id.localeCompare(a.id));
   $("#who").innerHTML = `${eds.length ? `<span class="ed"><select class="sel" id="edPick" aria-label="Kalamela year">${eds.map(e => `<option value="${esc(e.id)}" ${e.id === S.ed ? "selected" : ""}>${esc(e.name || e.id)}</option>`).join("")}</select>
       ${S.edition ? `<span class="phase ${esc(S.edition.phase)}">${esc(S.edition.phase === "setup" ? "Setting up" : S.edition.phase === "live" ? "Live" : "Archived")}</span>` : ""}</span>` : ""}
@@ -124,11 +146,15 @@ function permErr(e) { console.error(e); toast(e && e.code === "permission-denied
 function stopEdition() { for (const u of S.edUnsubs) try { u(); } catch {} S.edUnsubs = []; S.peopleWatched = false; }
 function selectEdition(id) {
   stopEdition(); S.ed = id; store.set("ed", id);
-  for (const m of [S.lists, S.marks, S.intake, S.decisions, S.locks, S.centres, S.participants, S.payments]) m.clear();
-  draft.clear(); bases.clear(); kinds.clear(); S.loaded = {};
+  for (const m of [S.lists, S.marks, S.intake, S.decisions, S.locks, S.centres, S.participants, S.payments, S.status, S.att]) m.clear();
+  S.plan = null; draft.clear(); bases.clear(); kinds.clear(); S.loaded = {};
   const on = (name, map) => S.edUnsubs.push(D.watchCol(id, name, m => { map.clear(); for (const [k, v] of m) map.set(k, v); S.loaded[name] = true; renderAll(); }, permErr));
   S.edUnsubs.push(D.watchEdition(id, e => { S.edition = e; renderAll(); }, permErr));
-  on("lists", S.lists); on("marks", S.marks); on("intake", S.intake); on("decisions", S.decisions); on("locks", S.locks);
+  on("lists", S.lists);
+  if (S.role !== "stage") { on("marks", S.marks); on("intake", S.intake); on("decisions", S.decisions); on("locks", S.locks); }   // stage managers don't see marks
+  if (S.role !== "viewer") on("att", S.att);
+  S.edUnsubs.push(D.watchPlan(id, p => { S.plan = p; renderAll(); }, permErr));
+  S.edUnsubs.push(D.watchStageStatus(id, m => { S.status.clear(); for (const [k, v] of m) S.status.set(k, v); renderAll(); }, permErr));
   if (can.chief()) { on("centres", S.centres); on("payments", S.payments); }
   renderAll();
 }
@@ -140,17 +166,23 @@ function watchPeople() {
 // ---------------------------------------------------------------- rendering
 function getM(eid) { return draft.get(eid) || S.marks.get(eid) || null; }
 function compute() {
-  const marks = draft.size ? new Map([...S.marks, ...draft]) : S.marks;
+  let marks = draft.size ? new Map([...S.marks, ...draft]) : S.marks;
+  // Someone marked Absent on stage and not yet entered in the tabulation room: pre-fill as Absent (the operator can change it)
+  const stageAbs = [...S.att].filter(([eid, a]) => a.att === "Absent" && !marks.has(eid));
+  if (stageAbs.length) { marks = new Map(marks); for (const [eid, a] of stageAbs) marks.set(eid, { att: "Absent", j1: [], j2: [], fromStage: a }); }
   S.R = computeAll({ lists: [...S.lists.values()], marks, intake: S.intake, decisions: S.decisions, locks: S.locks, config: cfg() });
 }
 function renderTabs() {
-  const v = viewId(); let html = "", last = "";
-  for (const x of myViews()) {
-    const g = VIEWS.slice(0, VIEWS.indexOf(x) + 1).reverse().find(y => y.grp)?.grp || "";
-    if (g !== last) { html += `<span class="grp">${esc(g)}</span>`; last = g; }
-    html += `<a href="#${x.id}" ${x.id === v ? 'aria-current="page"' : ""}>${esc(x.label)}</a>`;
-  }
-  $("#tabs").innerHTML = html; $("#tabs").hidden = false;
+  const v = viewId(), mine = myViews(), cur = (VIEWS.find(x => x.id === v) || {}).area;
+  lastInArea[cur] = v;
+  const areas = AREAS.filter(a => mine.some(x => x.area === a.id));
+  const first = a => lastInArea[a.id] && mine.some(x => x.id === lastInArea[a.id]) ? lastInArea[a.id] : mine.find(x => x.area === a.id).id;
+  const top = areas.length > 1 ? `<div class="areas" role="navigation" aria-label="Areas">${areas.map(a =>
+    `<a href="#${first(a)}" class="area${a.id === cur ? " on" : ""}" ${a.id === cur ? 'aria-current="true"' : ""} title="${esc(a.hint)}">${esc(a.label)}</a>`).join("")}</div>` : "";
+  const subs = mine.filter(x => x.area === cur);
+  const sub = `<div class="subtabs" aria-label="${esc((AREAS.find(a => a.id === cur) || {}).label || "")} screens">${subs.map(x =>
+    `<a href="#${x.id}" ${x.id === v ? 'aria-current="page"' : ""}>${esc(x.label)}</a>`).join("")}</div>`;
+  $("#tabs").innerHTML = top + sub; $("#tabs").hidden = false;
 }
 export function renderAll() {
   if (!S.user || !S.role) return;
@@ -192,14 +224,14 @@ function vControl(view) {
     <div class="vhead"><div><h2>Control</h2><p>Intake desk: when an event's judging sheets reach the room, tick <b>Sheets received</b> and fill Venue and Operator. Status updates by itself from Marks entry. Click an event to open it for entry.</p></div></div>
     <div id="ctrlTop"></div>
     <div class="panel scroll"><table>
-      <thead><tr><th>Event</th><th>Group</th><th class="c">Sheets received</th><th>Time · by</th><th>Venue</th><th>Operator</th><th class="c">Entries</th><th class="c">Absent</th><th class="c">Entered OK</th><th class="c">Verified</th><th>Status</th></tr></thead>
+      <thead><tr><th>Event</th><th>Group</th><th class="c">Sheets received</th><th>Time · by</th><th>Venue</th><th>Operator</th><th class="c">Entries</th><th class="c">Absent</th><th class="c">Entered OK</th><th class="c">Verified</th><th>Stage</th><th>Status</th></tr></thead>
       <tbody id="ctrlBody">${S.R.events.map(e => `<tr data-key="${esc(e.key)}">
         <td><a href="#entry" data-open="${esc(e.key)}">${esc(e.ev)}</a></td><td class="muted">${esc(gl(e.grp))}</td>
         <td class="c"><input type="checkbox" id="rec-${esc(e.key)}" data-f="rec" aria-label="Sheets received: ${esc(e.ev)} ${esc(gl(e.grp))}"></td>
         <td class="num small" data-c="time"></td>
         <td><input class="in" id="ven-${esc(e.key)}" data-f="venue" size="10" placeholder="Venue" aria-label="Venue"></td>
         <td><input class="in" id="op-${esc(e.key)}" data-f="op" size="10" placeholder="Name" aria-label="Operator"></td>
-        <td class="c num" data-c="n"></td><td class="c num" data-c="abs"></td><td class="c num" data-c="ok"></td><td class="c num" data-c="ver"></td><td data-c="st"></td></tr>`).join("")}</tbody>
+        <td class="c num" data-c="n"></td><td class="c num" data-c="abs"></td><td class="c num" data-c="ok"></td><td class="c num" data-c="ver"></td><td class="small" data-c="stg"></td><td data-c="st"></td></tr>`).join("")}</tbody>
     </table></div></div>`;
   const tb = $("#ctrlBody");
   tb.addEventListener("click", ev => { const a = ev.target.closest("[data-open]"); if (a) { entryKey = a.dataset.open; store.set("entry", entryKey); } });
@@ -238,6 +270,8 @@ function refreshControl() {
     tr.querySelector('[data-c="ok"]').textContent = e.okc;
     tr.querySelector('[data-c="ver"]').textContent = e.verc;
     tr.querySelector('[data-c="st"]').innerHTML = pill(e.status) + lockChip(e);
+    const pl = S.plan && S.plan.items && S.plan.items[e.key], ss = Stage.stageStatusOf(S, e.key);
+    tr.querySelector('[data-c="stg"]').innerHTML = pl ? `${esc(Stage.stageName(S, pl.stage))}${pl.start ? ` <span class="muted">${esc(pl.start)}</span>` : ""}<br>${ss === "active" ? '<span class="pill s-ready">On stage</span>' : ss === "done" ? '<span class="pill s-locked">Completed</span>' : '<span class="muted">Not started</span>'}` : '<span class="muted">Not scheduled</span>';
   }
 }
 
@@ -331,6 +365,7 @@ export function hhmm(ts) {
   return isNaN(d) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 function whoCell(m, r, mine) {
+  if (m.fromStage) return `<div class="muted" title="${esc(m.fromStage.by || "")}">Absent – marked on stage by <b>${m.fromStage.by === S.user.email ? "you" : shortName(m.fromStage.name, m.fromStage.by)}</b>${m.fromStage.at ? " · " + hhmm(m.fromStage.at) : ""}</div>`;
   const enteredBy = m.enteredBy || m.by;
   if (!enteredBy || r.check === "Not entered") return "";
   const ent = `<div title="${esc(enteredBy)}">Entered: <b>${mine ? "you" : shortName(m.enteredName, enteredBy)}</b>${m.enteredAt ? " · " + hhmm(m.enteredAt) : ""}</div>`;

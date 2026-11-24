@@ -66,6 +66,15 @@ Setup is done.
 
 ## Part B – running a Kalamela year
 
+### Finding your way
+The menu has four areas, with the screens of the current area underneath:
+- **Entries**: Centre forms, Participants & admit cards, Event lists (before the day)
+- **Tabulation**: Control, Stage, Marks entry, Results & ties (on the day)
+- **Results**: Result slip, All results, Scoreboard, Prathibha & Thilakam, Certificates, Kendra list
+- **Settings**: Rules, Schedule, Years, Team & roles, Backup & audit
+
+Each person sees only the areas their role allows. Admins start in Entries while the year is being set up; on the day, tabulators start in Tabulation. Stage managers see only their Stage screen. Viewers see Results only.
+
 ### Roles
 | Role | Can do |
 |---|---|
@@ -73,6 +82,7 @@ Setup is done.
 | **Chief tabulator** | Tabulation, committee tie decisions, participant list and admit cards, backups |
 | | *Only admins and the chief tabulator can see personal details (dates of birth, phone numbers, photos).* |
 | **Tabulator** | Intake ticks, marks entry, verification |
+| **Stage manager** | Their stage's running order (Start / Mark completed) and Present / Absent for each entry. Cannot see marks or personal details |
 | **Viewer** | Results and scoreboard only |
 
 People sign in with their own Google (Gmail) account. Add the exact Gmail address under **Team & roles**. Remove people after the Kalamela.
@@ -97,8 +107,10 @@ People sign in with their own Google (Gmail) account. Add the exact Gmail addres
 
 **3. After the entry deadline**
 - **Centre forms → Build event lists and chest numbers.** Chest numbers start at 1001 (Group I) and 2001 (Group II). Building again later keeps the numbers already given.
-- **Participants → Show admit cards → Print.** Each card has only the photo, chest number and events (no name, Sakha or Centre). Print **Event lists** for stage managers.
-- Hold a **practice run** with the tabulation team on the venue Wi-Fi, using a few made-up marks.
+- **Entries → Participants & admit cards → Download admit cards (PDF).** You get 8 cards per A4 page, ready to print and cut. Each card has the Kalamela name, date and venue, the photo, chest number, group and events, but no name, Sakha or Centre. To print one Centre's cards, type the Centre's name in the search box first, then download. Print **Event lists** for stage managers.
+- **Settings → Schedule**: add the stages and rooms (e.g. Main Stage, Stage 2, Writing Hall). Put each event on one using **Put on**, order them with ↑ ↓, and use **Fill times** (first start + minutes per entry) to fill planned times; adjust by hand if needed. Click **Save and publish**. This also updates the participants' **My Kalamela** page. You can change it again any time, including on the day.
+- Add stage managers under **Team & roles** with the role **Stage manager**.
+- Hold a **practice run** with the tabulation team and stage managers on the venue Wi-Fi, using a few made-up marks.
 - **Backup & audit → Clear practice marks.**
 
 **4. Morning of the Kalamela**
@@ -114,7 +126,12 @@ People sign in with their own Google (Gmail) account. Add the exact Gmail addres
 
 ## Part C – tabulation room on the day
 
-People: 1 chief tabulator, 1 intake desk, and pairs of operator + verifier (about one pair per venue).
+People: 1 chief tabulator, 1 intake desk, pairs of operator + verifier (about one pair per venue), and one stage manager per stage or room.
+
+**Stage managers** (on a phone): open the site and choose your stage. When an event begins, press **Start**; when it ends, press **Mark completed** (starting the next event also completes the previous one). As each entry is called, tap **Present** or **Absent**. Participants see the progress live on their phones, and the tabulation room sees it under Control. Anyone marked Absent on stage appears as Absent in Marks entry already; the operator can change it if the judging sheet differs.
+
+**Participants**: scan the QR code on their admit card, or open the website address followed by `/me.html` and type their chest number. They see each of their events, the stage, the planned time, whether it's on now or done, and where to go next. No sign-in is needed, and the page shows no names or personal details.
+
 
 1. **Intake desk**: when an event's judging sheets arrive, open **Control**, tick **Sheets received**, and fill Venue and Operator. The Time column records who ticked it. Hand the sheets to that operator.
 2. **Operator**: **Marks entry → pick the event.** Type each judge's marks in the order of the judging sheet (A, B, C…) and each judge's written total. Press **Enter** to jump to the next box. Rows save by themselves (green dot). Mark absentees under Attendance.
@@ -139,6 +156,9 @@ Rules used: Final score = (Judge I + Judge II) ÷ 2 (one judge for Quiz unless t
 | Can't change entries or clear marks | The year is **Live**. Switch it back to Setting up under Years only if a real correction is needed. |
 | "Not allowed: check your role and the year's phase" | Your role doesn't permit that, or the year is archived. |
 | "… saved this row while you were changing it. Your change was NOT saved" | Two people changed the same row at once. The website kept the first save and refused the second, so nothing was overwritten. The row now shows what was saved: check it against the paper and re-type if needed. Give each operator separate events to avoid this. |
+| A participant's page says "schedule hasn't been published" | Open **Settings → Schedule** and click **Save and publish**. |
+| A participant's page says "No events found" | Check the chest number on the admit card. If the Centre's form was changed, rebuild the event lists, then **Save and publish** the schedule again. |
+| A stage manager sees "No schedule yet" | The schedule hasn't been saved. An admin opens **Settings → Schedule**. |
 | Marks boxes are grey and the screen says "Results announced" | That event was locked after announcement. Only the chief tabulator can unlock it, on the Result slip. |
 | Entire site down, or the internet is gone for good | Use the latest **Excel backup** as a paper/Excel fallback and carry on by hand. Enter the marks later. |
 | "Quota exceeded" or the site stops saving late in the day | The free daily limit was reached (see below). It resets at about 1:30 pm IST. To avoid it, see "Costs and limits". |

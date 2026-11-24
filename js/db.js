@@ -159,21 +159,59 @@ export async function writeBuild(ed, chestUpdates, lists, removeKeys) {
 /** Delete practice marks, intake ticks, decisions and announcement locks (allowed only in setup). The audit trail is kept. */
 export async function clearPractice(ed) {
   const ops = [];
-  for (const name of ["marks", "intake", "decisions", "locks"]) {
+  for (const name of ["marks", "intake", "decisions", "locks", "att"]) {
     const s = await getDocs(collection(db, edPath(ed, name)));
     for (const d of s.docs) ops.push({ del: true, ref: d.ref });
   }
+  const st = await getDocs(collection(db, "public", ed, "status"));   // stage progress shown to participants
+  for (const d of st.docs) ops.push({ del: true, ref: d.ref });
   await commitInChunks(ops, 400);
   await logAdmin(ed, "clear", `Practice data cleared: ${ops.length} records`);
   return ops.length;
 }
+// ---------------------------------------------------------------- schedule, stages and the public participant page
+/** The schedule: stages/rooms and, for each event list, its stage, running order and planned start. */
+export function watchPlan(ed, cb, err) {
+  return onSnapshot(doc(db, edPath(ed, "plan"), "main"), d => cb(d.exists() ? d.data() : null), err);
+}
+export async function savePlan(ed, plan) {
+  await setDoc(doc(db, edPath(ed, "plan"), "main"), { stages: plan.stages, items: plan.items, by: myEmail, at: serverTimestamp() });
+  await logAdmin(ed, "schedule", `Schedule saved: ${plan.stages.length} stages/rooms, ${Object.keys(plan.items).length} events placed`);
+}
+/** Publish what participants may see: event names, stages, times and which chest numbers are in which events.
+ *  No names, dates of birth, phone numbers or photos. */
+export async function publishPublic(ed, meta, chests) {
+  const metaRef = doc(db, "public", ed), old = await getDoc(metaRef);
+  const before = old.exists() ? old.data().chests || [] : [], now = Object.keys(chests);
+  const ops = [{ ref: metaRef, data: { ...meta, chests: now, updatedAt: serverTimestamp() } }, { ref: doc(db, "public", "current"), data: { ed } }];
+  for (const c of now) ops.push({ ref: doc(db, "public", ed, "chest", c), data: { events: chests[c] } });
+  for (const c of before) if (!chests[c]) ops.push({ del: true, ref: doc(db, "public", ed, "chest", c) });
+  await commitInChunks(ops, 400);
+  return now.length;
+}
+/** Live stage progress for each event list: pending, active (on stage now) or done. Public, so participants see it. */
+export function watchStageStatus(ed, cb, err) {
+  return onSnapshot(collection(db, "public", ed, "status"), s => { const m = new Map(); for (const d of s.docs) m.set(d.id, d.data()); cb(m); }, err);
+}
+export async function setStageStatus(ed, key, status) {
+  const b = writeBatch(db);
+  b.set(doc(db, "public", ed, "status", key), { status, at: serverTimestamp() });
+  b.set(doc(collection(db, edPath(ed, "audit"))), { kind: "stage", eid: key, detail: status, by: myEmail, at: serverTimestamp() });
+  await b.commit();
+}
+/** Stage attendance for one entry: "Present", "Absent", or null to set it back to pending. */
+export async function saveAtt(ed, eid, att) {
+  const ref = doc(db, edPath(ed, "att"), eid);
+  if (att) await setDoc(ref, { att, by: myEmail, name: myName, at: serverTimestamp() }); else await deleteDoc(ref);
+}
+
 export async function readAudit(ed, n = 300) {
   const s = await getDocs(query(collection(db, edPath(ed, "audit")), orderBy("at", "desc"), limit(n)));
   return s.docs.map(d => d.data());
 }
 export async function readAll(ed) {
   const out = {};
-  for (const name of ["centres", "participants", "lists", "marks", "intake", "decisions", "locks", "payments"]) {
+  for (const name of ["centres", "participants", "lists", "marks", "intake", "decisions", "locks", "payments", "att", "plan"]) {
     const s = await getDocs(collection(db, edPath(ed, name)));
     out[name] = Object.fromEntries(s.docs.map(d => [d.id, d.data()]));
   }

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My Kalamela</title>
+<meta name="description" content="Your Kalamela events, stages and times, live.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect width='9' height='9' rx='2' fill='%23A30D35'/%3E%3Crect x='11' width='9' height='9' rx='2' fill='%23FDBE00'/%3E%3Crect y='11' width='9' height='9' rx='2' fill='%23077A74'/%3E%3Crect x='11' y='11' width='9' height='9' rx='2' fill='%23E5521A'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  .me{max-width:640px;margin:0 auto;display:grid;gap:14px}
+  .lookup{display:flex;gap:8px;flex-wrap:wrap}
+  .lookup input{flex:1 1 160px;font-size:22px;font-family:var(--f-mono);padding:10px 12px;min-width:0}
+  .lookup .btn{font-size:16px;padding:10px 18px}
+  .nextcard{background:var(--surface);border:2px solid var(--maroon);border-radius:14px;padding:16px 18px;display:grid;gap:6px}
+  .nextcard.now{border-color:var(--ok);background:var(--ok-bg)}
+  .nextcard .k{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+  .nextcard .ev{font-family:var(--f-display);font-size:24px;font-weight:800;line-height:1.15}
+  .nextcard .go{font-size:18px;font-weight:600}
+  .nextcard .go b{color:var(--maroon)}
+  .nextcard.now .go b{color:var(--ok)}
+  .evrow{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center}
+  .evrow.done{opacity:.7}
+  .evrow .t{font-weight:600}
+  .evrow .s{font-size:13px;color:var(--muted)}
+  .evrow .s b{color:var(--ink)}
+  .chestbig{font-family:var(--f-mono);font-weight:700}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap"><div class="brand">
+    <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <div><h1 id="siteTitle">My Kalamela</h1><div class="sub" id="siteSub">Mar Thoma Yuvajana Sakhyam · Mumbai Diocese</div></div>
+  </div></div>
+</header>
+<main class="wrap">
+  <div class="me">
+    <div id="intro"><h2 style="font-size:22px">Your events, stages and times</h2><p class="muted" style="margin:4px 0 0">Type the chest number on your admit card, or scan the QR code on it. This page updates by itself.</p></div>
+    <form class="lookup" id="f"><label class="sr" for="chest" style="position:absolute;left:-9999px">Chest number</label>
+      <input class="txt" id="chest" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Chest no., e.g. 1012" autocomplete="off">
+      <button class="btn primary" type="submit">Show my events</button></form>
+    <div id="out"></div>
+  </div>
+</main>
+<script type="module" src="js/me.js"></script>
+</body>
+</html>

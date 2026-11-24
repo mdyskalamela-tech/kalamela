@@ -5,6 +5,7 @@ import { $, $$, esc, toast, fmtDate, fmtTime, downloadXlsx, downloadText, makeTh
 import { slug, listKey, eventIndex, eventDef, LETTERS } from "./compute.js";
 import { readCentreForm } from "./importer.js";
 import { DEFAULT_CONFIG } from "./defaults.js";
+import { SITE_NAME, ORG_NAME } from "./config.js";
 
 const clone = o => JSON.parse(JSON.stringify(o));
 const phaseName = p => ({ setup: "Setting up", live: "Live", archived: "Archived" }[p] || p);
@@ -186,15 +187,88 @@ export function vPeople(view, ctx) {
   view.dataset.keep = "1";
   view.innerHTML = `<div class="view">
     <div class="vhead"><div><h2>Participants</h2><p>Everyone from the saved Centre forms, with photos and chest numbers. Switch to admit cards to print them (about 9 per A4 page). Admit cards show only the photo, chest number and events: no name, Sakha or Centre.</p></div>
-      <div class="actions"><button class="btn" id="toggleCards">${peopleCards ? "Show table" : "Show admit cards"}</button><button class="btn" data-print>Print</button><button class="btn" id="dlPeople">Download (.xlsx)</button></div></div>
+      <div class="actions"><button class="btn" id="toggleCards">${peopleCards ? "Show table" : "Show admit cards"}</button><button class="btn" data-print>Print</button><button class="btn primary" id="dlCards">Download admit cards (PDF)</button><button class="btn" id="dlPeople">Download (.xlsx)</button></div></div>
     <div class="picker"><input class="txt" id="pq" placeholder="Search name, chest, Sakha or Centre" value="${esc(peopleFilter)}" style="flex:1 1 260px;max-width:420px"><span class="muted" id="peopleCount"></span></div>
     <div id="peopleBody"></div></div>`;
   $("#pq").oninput = e => { peopleFilter = e.target.value; draw(); };
   $("#toggleCards").onclick = () => { peopleCards = !peopleCards; $("#toggleCards").textContent = peopleCards ? "Show table" : "Show admit cards"; draw(); };
   view.querySelector("[data-print]").onclick = () => window.print();
+  $("#dlCards").onclick = () => {
+    const q = peopleFilter.toLowerCase();
+    const list = [...S.participants.values()].filter(p => p.chest && (!q || [p.name, p.centre, p.sakha, String(p.chest)].some(x => String(x || "").toLowerCase().includes(q))))
+      .sort((a, b) => Number(a.chest) - Number(b.chest));
+    if (!list.length) return toast("No participants with chest numbers yet. Build the event lists first.", "bad");
+    try {
+      admitCardsPdf(list, { year: S.edition?.name || S.ed, date: ctx.cfg().eventDate, venue: ctx.cfg().venue, gl },
+        `Kalamela_${S.ed}_Admit_Cards${q ? "_" + q.replace(/[^a-z0-9]+/g, "-") : ""}.pdf`);
+      const skipped = [...S.participants.values()].filter(p => !p.chest).length;
+      toast(`Admit cards for ${list.length} participant(s) downloaded.${skipped && !q ? ` ${skipped} without a chest number were left out.` : ""}`);
+    } catch (e) { console.error(e); toast("Couldn't make the PDF. Reload the page and try again.", "bad"); }
+  };
   $("#dlPeople").onclick = () => downloadXlsx(`Kalamela_${S.ed}_Participants.xlsx`, [{ name: "Participants", rows: [["Chest", "Name", "Gender", "Date of birth", "Group", "Sakha", "Centre", "Membership", "Phone", "Events", "Team events", "Photo"],
     ...[...S.participants.values()].sort((a, b) => (a.chest || 99999) - (b.chest || 99999)).map(p => [p.chest || "", p.name, p.gender, fmtDate(p.dob), gl(p.group), p.sakha, p.centre, p.membership, p.phone, (p.events || []).join(", "), (p.teams || []).join(", "), p.photo ? "Yes" : "No"])] }]);
   view._refresh = draw; draw();
+}
+
+/** Printable admit cards: 8 per A4 page (2 × 4), cut along the borders. Photo, chest number, group, events and the
+ *  Kalamela's name, date and venue. No name, Sakha or Centre, so judges and stage staff identify people by chest number. */
+function admitCardsPdf(list, { year, date, venue, gl }, fileName) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const M = 10, GAP = 5, W = (210 - 2 * M - GAP) / 2, H = (297 - 2 * M - 3 * GAP) / 4;
+  const maroon = [163, 13, 53], ink = [31, 26, 29], muted = [95, 88, 92], line = [207, 198, 203];
+  const when = date ? new Date(date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "";
+  doc.setProperties({ title: `${SITE_NAME} ${year} – admit cards`, author: ORG_NAME });
+  list.forEach((p, i) => {
+    if (i && i % 8 === 0) doc.addPage();
+    const k = i % 8, x = M + (k % 2) * (W + GAP), y = M + Math.floor(k / 2) * (H + GAP);
+    doc.setDrawColor(...line); doc.setLineWidth(0.3); doc.roundedRect(x, y, W, H, 2.5, 2.5);
+    // header band with the four-colour mark
+    doc.setFillColor(...maroon); doc.roundedRect(x, y, W, 12, 2.5, 2.5, "F"); doc.rect(x, y + 6, W, 6, "F");
+    [[253, 190, 0], [7, 122, 116], [229, 82, 26], [255, 255, 255]].forEach((c, j) => { doc.setFillColor(...c); doc.roundedRect(x + 4 + (j % 2) * 3.4, y + 2.6 + Math.floor(j / 2) * 3.4, 2.8, 2.8, 0.5, 0.5, "F"); });
+    doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(10.5);
+    doc.text(`${SITE_NAME.toUpperCase()} ${year}`, x + 12.5, y + 5.6);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); doc.text(ORG_NAME, x + 12.5, y + 9.4);
+    doc.setFontSize(6.3); doc.text("ADMIT CARD", x + W - 4, y + 5.6, { align: "right" });
+    // photo
+    const px = x + 4, py = y + 15.5, pw = 27, ph = 33.75;
+    let drawn = false;
+    if (p.photo) { try { doc.addImage(p.photo, "JPEG", px, py, pw, ph); drawn = true; } catch { drawn = false; } }
+    if (!drawn) { doc.setFillColor(239, 235, 237); doc.rect(px, py, pw, ph, "F"); doc.setTextColor(...muted); doc.setFontSize(7); doc.text("Paste photo", px + pw / 2, py + ph / 2, { align: "center" }); }
+    doc.setDrawColor(...line); doc.rect(px, py, pw, ph);
+    // chest number and group
+    const tx = x + 35;
+    doc.setTextColor(...muted); doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.text("CHEST NO.", tx, y + 18);
+    doc.setTextColor(...ink); doc.setFontSize(30); doc.text(String(p.chest), tx - 0.6, y + 29);
+    doc.setFillColor(239, 235, 237); const g = gl(p.group) || ""; doc.setFontSize(7.5); const gw = doc.getTextWidth(g) + 5;
+    doc.roundedRect(tx, y + 31.5, gw, 5, 2.5, 2.5, "F"); doc.setTextColor(...ink); doc.text(g, tx + 2.5, y + 35);
+    // QR code: opens the participant's "My Kalamela" page (events, stages, times, live progress)
+    if (window.qrcode) {
+      try {
+        const qr = window.qrcode(0, "M"); qr.addData(new URL("me.html#" + p.chest, location.href).href); qr.make();
+        const n = qr.getModuleCount(), size = 17, cell = size / n, qx = x + W - 4 - size, qy = y + 14.5;
+        doc.setFillColor(...ink);
+        for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) doc.rect(qx + c * cell, qy + r * cell, cell + 0.02, cell + 0.02, "F");
+        doc.setTextColor(...muted); doc.setFont("helvetica", "normal"); doc.setFontSize(5.4);
+        doc.text("Scan: my events", qx + size / 2, qy + size + 2.4, { align: "center" }); doc.setFont("helvetica", "bold");
+      } catch {}
+    }
+    // events
+    doc.setTextColor(...muted); doc.setFontSize(6.5); doc.text("EVENTS", tx, y + 41.5);
+    doc.setTextColor(...ink); doc.setFont("helvetica", "normal"); doc.setFontSize(7.6);
+    const evs = [...(p.events || []), ...(p.teams || []).map(t => t + " – team")];
+    let ly = y + 45.2; const maxY = y + H - 9.5;
+    for (const ev of evs) {
+      const lines = doc.splitTextToSize("• " + ev, W - 35 - 4);
+      if (ly + (lines.length - 1) * 3.3 > maxY) { doc.text("…", tx, ly); break; }
+      doc.text(lines, tx, ly); ly += lines.length * 3.3;
+    }
+    // footer: date and venue
+    doc.setDrawColor(...line); doc.line(x + 4, y + H - 7, x + W - 4, y + H - 7);
+    doc.setTextColor(...muted); doc.setFontSize(6.8);
+    doc.text([when, venue].filter(Boolean).join("  ·  "), x + 4, y + H - 3);
+  });
+  doc.save(fileName);
 }
 
 // ================================================================ RULES
@@ -340,7 +414,7 @@ let usersCache = [], usersUnsub = null;
 export function vTeam(view, ctx) {
   const { S, D } = ctx;
   view.dataset.keep = "1";
-  const ROLES = { admin: "Admin", chief: "Chief tabulator", tabulator: "Tabulator", viewer: "Viewer" };
+  const ROLES = { admin: "Admin", chief: "Chief tabulator", tabulator: "Tabulator", stage: "Stage manager", viewer: "Viewer" };
   const draw = () => {
     const el = $("#teamBody"); if (!el) return;
     const owner = D.ownerEmail();
@@ -360,7 +434,7 @@ export function vTeam(view, ctx) {
       <label class="field"><span>Role</span><select class="txt" id="nuRole">${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${k === "tabulator" ? "selected" : ""}>${v}</option>`).join("")}</select></label></div>
       <div><button class="btn primary" id="nuAdd">Add</button></div></section>
     <div id="teamBody"></div>
-    <section class="card"><h3>Roles</h3><p><b>Admin</b>: everything, including Centre forms, rules, years and this list. <b>Chief tabulator</b>: tabulation plus committee tie decisions, participants and backups. <b>Tabulator</b>: intake ticks, marks entry and verification. <b>Viewer</b>: results and scoreboard only.</p></section></div>`;
+    <section class="card"><h3>Roles</h3><p><b>Admin</b>: everything, including Centre forms, rules, years and this list. <b>Chief tabulator</b>: tabulation plus committee tie decisions, participants and backups. <b>Tabulator</b>: intake ticks, marks entry and verification. <b>Stage manager</b>: their stage's running order (start / completed) and Present / Absent for each entry; no marks. <b>Viewer</b>: results and scoreboard only.</p></section></div>`;
   $("#nuAdd").onclick = async () => {
     const email = $("#nuEmail").value.trim().toLowerCase(), name = $("#nuName").value.trim(), role = $("#nuRole").value;
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast("Enter a valid email address.", "bad");
