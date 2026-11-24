@@ -74,9 +74,11 @@ export function vSchedule(view, ctx) {
         <td>${sel(e.name, "part", x.part, [["first", "First"], ["middle", "Middle"], ["last", "Last"]])}</td>
         <td>${sel(e.name, "where", x.where, [["stage", "Stage"], ["room", "Room"]])}</td>
         <td><input class="in" type="number" min="1" max="240" style="width:5.5em" data-aev="${esc(e.name)}" data-af="mins" value="${esc(x.mins)}" aria-label="${esc(e.name)}: minutes" ${dis}> <span class="small muted">${x.where === "room" ? "whole event" : "per entry"}</span></td>
+        <td><input class="in" list="apPanels" maxlength="40" style="width:11em" data-aev="${esc(e.name)}" data-af="panel" value="${esc(x.panel)}" placeholder="marked later" aria-label="${esc(e.name)}: judging panel" ${dis}></td>
         <td class="c num">${n || "–"}</td></tr>`;
     }).join("");
-    $("#apSettings").innerHTML = `<div class="apgrid">
+    const panelNames = [...new Set(evs.map(e => a.events[e.name].panel).filter(Boolean))];
+    $("#apSettings").innerHTML = `<p class="small muted" style="margin:0 0 8px">Judging panels: ${panelNames.length ? panelNames.map(esc).join(" · ") : "none"} (change them under Event order and timing).</p><div class="apgrid">
         ${num("stages", "Stages available", 1, 12, "maximum number of stages")}
         ${num("rooms", "Rooms for written &amp; drawing events", 0, 12, "0 = run them on the stages")}
         ${time("start", "Day starts")}
@@ -88,8 +90,15 @@ export function vSchedule(view, ctx) {
       <label class="apchk"><input type="checkbox" data-ab="firstBarrier" ${a.firstBarrier ? "checked" : ""} ${dis}> <span><b>First</b> events finish on every stage before any <b>Middle</b> event starts on a stage</span></label>
       <label class="apchk"><input type="checkbox" data-ab="lastBarrier" ${a.lastBarrier ? "checked" : ""} ${dis}> <span><b>Last</b> events start only after every <b>First</b> and <b>Middle</b> event on the stages has finished</span></label>
       <details class="apev"${wasOpen ? " open" : ""}><summary>Event order and timing <span class="muted small">· First, then Middle, then Last on every stage</span></summary>
-        <div class="scroll"><table><thead><tr><th>Event</th><th>Part</th><th>Where</th><th>Minutes</th><th class="c">Entries</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="scroll"><table><thead><tr><th>Event</th><th>Part</th><th>Where</th><th>Minutes</th><th>Judges (panel)</th><th class="c">Entries</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <datalist id="apPanels">${panelNames.map(n => `<option value="${esc(n)}">`).join("")}</datalist>
+        <p class="small muted"><b>Judges:</b> events with the same panel name never run at the same time, and each panel is kept on one stage where possible. If you have two panels for one kind of event, give them different names (e.g. "Speech" for Malayalam and "Speech B" for English) so their events can run side by side. Leave it empty for events that are marked later (written and drawing).</p>
         <p class="small muted">Minutes on a stage are per entry (performance plus getting on and off). In a room the whole event runs at once, so the minutes are for the whole event (including the 10 minutes when the topic is given).</p></details>`;
+  };
+  const drawPanelList = () => {
+    const names = [...new Set(cfgEvents().map(e => A().events[e.name].panel).filter(Boolean))];
+    const dl = $("#apPanels"); if (dl) dl.innerHTML = names.map(n => `<option value="${esc(n)}">`).join("");
+    const hd = $("#apSettings > p"); if (hd) hd.textContent = `Judging panels: ${names.length ? names.join(" · ") : "none"} (change them under Event order and timing).`;
   };
   const showReport = r => {
     const rp = r.report, late = rp.finishMins > 21 * 60;
@@ -98,6 +107,9 @@ export function vSchedule(view, ctx) {
     const tips = [];
     if (rp.pastMidnight) tips.push("The day would run <b>past midnight</b>, so planned times after midnight show as early-morning times.");
     if (late || rp.pastMidnight) tips.push(`To finish earlier: add a stage (${work.stages.filter(s => s.kind === "stage").length} now), untick the second box so team events can start while individual events are still running, or lower the minutes per entry.`);
+    // the panel that finishes last among the individual (Middle) events holds up the team events after it
+    const slow = (rp.panels || []).filter(x => x.parts.includes("middle")).sort((a, b) => b.toMins - a.toMins)[0];
+    if ((late || rp.pastMidnight) && slow && slow.events > 2) tips.push(`The <b>${esc(slow.name)}</b> judges have ${slow.events} events back to back (${esc(slow.from)}–${esc(slow.to)}) and set the pace. A second ${esc(slow.name)} panel would shorten the day more than another stage: give some of its events another panel name under Event order and timing.`);
     if (rp.unplaced.length) tips.push(`${rp.unplaced.length} event(s) could not be placed without a clash; they are under "Not scheduled". Add a stage or lower the buffer, then try again.`);
     $("#apOut").innerHTML = `<div class="banner ${rp.unplaced.length ? "bad" : late || rp.pastMidnight ? "warn" : "ok"}" style="display:block">
         <b>Planned ${rp.placed} events. Estimated finish ${esc(rp.finish)}${rp.pastMidnight ? " (after midnight)" : ""}.</b>
@@ -107,6 +119,7 @@ export function vSchedule(view, ctx) {
         ${rp.skipped.length ? `<br><span class="small">${rp.skipped.length} event(s) with no entries were left out.</span>` : ""}
         <br><b>Nothing is saved yet.</b> Check the plan below, move events if needed, then press <b>Save and publish</b>.</div>
       <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Stage / room</th><th>Kind</th><th class="c">Events</th><th class="c">Ends</th></tr></thead><tbody>${venues}</tbody></table></div>
+      ${(rp.panels || []).length ? `<div class="scroll" style="margin-top:8px"><table><thead><tr><th>Judging panel</th><th class="c">Events</th><th class="c">From</th><th class="c">To</th><th>Where</th></tr></thead><tbody>${rp.panels.map(x => `<tr><td>${esc(x.name)}</td><td class="c num">${x.events}</td><td class="c num">${esc(x.from)}</td><td class="c num">${esc(x.to)}</td><td>${esc(x.where.join(", "))}</td></tr>`).join("")}</tbody></table></div>` : ""}
       ${rp.busiest.length ? `<p class="small muted">Busiest participants (chest number: events): ${rp.busiest.map(([c, n]) => `${esc(c)}: ${n}`).join(" · ")}</p>` : ""}`;
   };
   const fillTimes = s => {
@@ -122,7 +135,7 @@ export function vSchedule(view, ctx) {
       <div class="actions"><span class="muted small" id="schCount"></span><button class="btn" id="schReset" ${locked ? "disabled" : ""}>Undo unsaved changes</button><button class="btn primary" id="schSave" ${locked ? "disabled" : ""}>Save and publish</button></div></div>
     ${locked && can.admin() ? '<div class="banner info">This year is archived, so the schedule is read-only.</div>' : ""}
     <section class="card" id="apCard"><h3>Auto-plan</h3>
-      <p>Fills in the stages, running order and planned times below from the event lists. Nobody is put in two events at the same time (team members included), and each stage runs its <b>First</b> events, then <b>Middle</b>, then <b>Last</b>. Set the options, press <b>Auto-plan</b>, check the result, then <b>Save and publish</b>. The settings are saved with the schedule for next year.</p>
+      <p>Fills in the stages, running order and planned times below from the event lists. Nobody is put in two events at the same time (team members included), no judging panel has two events at once, and each stage runs its <b>First</b> events, then <b>Middle</b>, then <b>Last</b>. Set the options, press <b>Auto-plan</b>, check the result, then <b>Save and publish</b>. The settings are saved with the schedule for next year.</p>
       <div id="apSettings"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn primary" id="apRun" ${locked ? "disabled" : ""}>Auto-plan the schedule</button><button class="btn" id="apDefaults" ${locked ? "disabled" : ""}>Reset these settings to defaults</button></div>
       <div id="apOut" aria-live="polite"></div></section>
@@ -138,6 +151,7 @@ export function vSchedule(view, ctx) {
     const t = e.target, d = t.dataset;
     if (d.a) { const a = A(); a[d.a] = t.type === "number" ? Number(t.value) : t.value; return; }
     if (d.aev && d.af === "mins") { A().events[d.aev].mins = Number(t.value); return; }
+    if (d.aev && d.af === "panel") { A().events[d.aev].panel = t.value; return; }
     if (d.sname) work.stages[+d.sname].name = t.value.slice(0, 40);
     if (d.start) { work.items[d.start].start = t.value; const s = work.stages.find(x => x.id === work.items[d.start].stage); if (s) s.filled = false; }
     if (d.fstart) work.stages.find(s => s.id === d.fstart).first = t.value;
@@ -148,7 +162,7 @@ export function vSchedule(view, ctx) {
     const t = e.target, d = t.dataset;
     if (d.a) { A(); work.auto = normalise(work.auto, ctx.cfg()); drawAuto(); return; }
     if (d.ab) { A()[d.ab] = t.checked; return; }
-    if (d.aev) { const x = A().events[d.aev]; if (d.af === "mins") x.mins = Number(t.value); else x[d.af] = t.value; work.auto = normalise(work.auto, ctx.cfg()); drawAuto(); return; }
+    if (d.aev) { const x = A().events[d.aev]; if (d.af === "mins") x.mins = Number(t.value); else x[d.af] = t.value; work.auto = normalise(work.auto, ctx.cfg()); if (d.af !== "panel") drawAuto(); else drawPanelList(); return; }
     if (d.skind) { work.stages[+d.skind].kind = t.value; draw(); }
     if (d.move) {
       const old = work.items[d.move];

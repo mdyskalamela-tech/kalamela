@@ -3,6 +3,7 @@
 //
 // The plan guarantees:
 //   • nobody is in two events at the same time (team members included), with a buffer between their events
+//   • a judging panel never has two events at the same time; each panel stays on one stage where that costs no time
 //   • on every stage, events run in their part order: First → Middle → Last
 //   • optional: Middle events wait until every First event has finished; Last events wait until every Middle event has finished
 //   • no event runs across the lunch break
@@ -12,6 +13,23 @@ const WRITTEN = /essay|story writing|poem writing|clay|quiz|pencil drawing|paint
 
 /** Starting values for each event, from the Kalamela Manual's time limits plus a little changeover. */
 export function defaultEventSetting(ev) {
+  return { ...defaultTiming(ev), panel: defaultPanel(ev) };
+}
+
+/** Default judging panel. Events with the same panel never run at the same time. "" = marked later (no live judges). */
+export function defaultPanel(ev) {
+  const n = String(ev.name || "");
+  if (/solo|group song/i.test(n)) return "Music – vocal";
+  if (/instrument/i.test(n)) return "Music – instrumental";
+  if (/elocution|bible reading|recitation/i.test(n)) return "Speech";
+  if (/quiz/i.test(n)) return "Quiz";
+  if (/margam|choreo/i.test(n)) return "Dance";
+  if (/tableau|mime/i.test(n)) return "Drama";
+  if (WRITTEN.test(n)) return "";
+  return ev.type === "team" ? "Team events" : "";
+}
+
+function defaultTiming(ev) {
   const n = String(ev.name || ""), team = ev.type === "team";
   if (team) {
     if (/group song/i.test(n)) return { where: "stage", part: "first", mins: 8 };     // 5 min + getting on and off
@@ -40,6 +58,8 @@ export const DEFAULT_AUTO = {
 };
 
 const PARTS = ["first", "middle", "last"];
+const JUDGE = "judges:";   // prefix that marks a judging panel among the people of an event
+const isJudge = p => p.startsWith(JUDGE);
 export let TRIES = 200;   // orderings tried; the plan that finishes earliest is kept
 export const setTries = n => { TRIES = n; };
 export const toMin = t => { const [h, m] = String(t || "").split(":").map(Number); return (isFinite(h) ? h : 9) * 60 + (isFinite(m) ? m : 0); };
@@ -62,6 +82,7 @@ export function normalise(auto, config) {
       where: s.where === "room" ? "room" : "stage",
       part: PARTS.includes(s.part) ? s.part : d.part,
       mins: clampInt(s.mins, 1, 240, d.mins),
+      panel: String(s.panel ?? d.panel).replace(/\s+/g, " ").trim().slice(0, 40),
     };
   }
   return out;
@@ -109,7 +130,9 @@ export function autoPlan(lists, config, auto, oldStages = []) {
     if (!n) { skipped.push(L.key); continue; }
     const s = evSet(L.ev), where = s.where === "room" && nRooms ? "room" : "stage";
     const dur = s.where === "room" ? s.mins : n * s.mins;   // written events: everyone at once, even on a stage
-    tasks.push({ L, key: L.key, part: s.part, where, dur, people: peopleOf(L), order: L.order ?? 999 });
+    const people = peopleOf(L);
+    if (s.panel) people.add(JUDGE + s.panel.toLowerCase());   // the judging panel is "in" the event too
+    tasks.push({ L, key: L.key, part: s.part, where, dur, people, panel: s.panel, order: L.order ?? 999 });
   }
 
   // Try a few orderings and keep the plan that finishes earliest (then the one with least waiting on stages).
@@ -133,13 +156,19 @@ export function autoPlan(lists, config, auto, oldStages = []) {
   // Report
   const ends = [...placed.values()].map(p => p.e), finish = ends.length ? Math.max(...ends) : day0;
   const perPerson = new Map();
-  for (const t of tasks) if (placed.has(t.key)) for (const p of t.people) perPerson.set(p, (perPerson.get(p) || 0) + 1);
+  for (const t of tasks) if (placed.has(t.key)) for (const p of t.people) if (!isJudge(p)) perPerson.set(p, (perPerson.get(p) || 0) + 1);
+  const panels = new Map();
+  for (const t of tasks) { const p = placed.get(t.key); if (!t.panel || !p) continue;
+    const x = panels.get(t.panel) || { name: t.panel, events: 0, s: Infinity, e: 0, venues: new Set(), parts: new Set(), mins: 0 };
+    x.events++; x.s = Math.min(x.s, p.s); x.e = Math.max(x.e, p.e); x.venues.add(p.venue); x.parts.add(t.part); x.mins += p.e - p.s; panels.set(t.panel, x); }
+  const vName = id => (stages.find(s => s.id === id) || {}).name || id;
   const busiest = [...perPerson.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   const report = {
     finish: toHHMM(finish), finishMins: finish, pastMidnight: finish >= 24 * 60, placed: placed.size, unplaced, skipped,
     venues: venues.map(v => ({ id: v.id, name: v.name, kind: v.kind, events: v.items.length,
       end: v.items.length ? toHHMM(Math.max(...v.items.map(i => i.e))) : "", busyMins: v.items.reduce((s, i) => s + i.e - i.s, 0) })),
-    busiest, clashes: countClashes(tasks, placed, A.buffer),
+    busiest, clashes: countClashes(tasks, placed, A.buffer, A.gap),
+    panels: [...panels.values()].sort((a, b) => a.s - b.s).map(x => ({ name: x.name, events: x.events, from: toHHMM(x.s), to: toHHMM(x.e), toMins: x.e, judgingMins: x.mins, parts: [...x.parts], where: [...x.venues].map(vName) })),
     timeline: [...placed.entries()].map(([key, p]) => ({ key, venue: p.venue, s: p.s, e: p.e, part: p.part })),
     partEnds: partEndsOf(placed, stages),
   };
@@ -147,11 +176,12 @@ export function autoPlan(lists, config, auto, oldStages = []) {
 }
 
 /** Independent check: pairs of events that share a participant and overlap (should always be 0). */
-export function countClashes(tasks, placed, buffer = 0) {
+export function countClashes(tasks, placed, buffer = 0, judgeGap = 0) {
   const byP = new Map(); let n = 0;
   for (const t of tasks) { const p = placed.get(t.key); if (!p) continue; for (const c of t.people) (byP.get(c) || byP.set(c, []).get(c)).push(p); }
-  for (const arr of byP.values()) for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++)
-    if (arr[i].s < arr[j].e + buffer && arr[j].s < arr[i].e + buffer) n++;
+  for (const [c, arr] of byP) { const buf = isJudge(c) ? judgeGap : buffer;
+    for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++)
+      if (arr[i].s < arr[j].e + buf && arr[j].s < arr[i].e + buf) n++; }
   return n;
 }
 
@@ -168,7 +198,7 @@ function runOnce(tasks, stages, A, key, day0, lunch0, lunch1) {
       if (crossesLunch(s, e)) { s = lunch1; continue; }
       for (const it of v.items) if (s < it.e + A.gap && it.s < e + A.gap) { s = it.e + A.gap; moved = true; break; }
       if (moved) continue;
-      for (const p of t.people) { for (const [a, b] of busy.get(p) || []) if (s < b + A.buffer && a < e + A.buffer) { s = b + A.buffer; moved = true; break; } if (moved) break; }
+      for (const p of t.people) { const buf = isJudge(p) ? A.gap : A.buffer; for (const [a, b] of busy.get(p) || []) if (s < b + buf && a < e + buf) { s = b + buf; moved = true; break; } if (moved) break; }
       if (moved) continue;
       return s;
     }
@@ -180,7 +210,7 @@ function runOnce(tasks, stages, A, key, day0, lunch0, lunch1) {
   for (const t of tasks) { let m = 0; for (const p of t.people) m = Math.max(m, loadOf.get(p)); t.load = m; }
   const cmp = (a, b) => { const x = key(a), y = key(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i]; return a.key < b.key ? -1 : 1; };
 
-  const placed = new Map(), unplaced = [];
+  const placed = new Map(), unplaced = [], panelHome = new Map();
   const partEnd = { first: day0, middle: day0, last: day0 };
   for (const part of PARTS) {
     // on each stage, this part starts after the stage's earlier parts
@@ -189,15 +219,17 @@ function runOnce(tasks, stages, A, key, day0, lunch0, lunch1) {
       : part === "last" && A.lastBarrier ? Math.max(partEnd.first, partEnd.middle) : day0;
     for (const t of tasks.filter(t => t.part === part).sort(cmp)) {
       let pick = null;
+      const home = t.panel ? panelHome.get(t.panel) : null;   // keep a panel on the stage it already uses, if that costs no time
       for (const v of t.where === "room" ? roomV : stageV) {
         const s = slot(t, v, t.where === "room" ? day0 : nb);
-        if (!pick || s < pick.s) pick = { v, s };
+        if (!pick || s < pick.s || (s === pick.s && v.id === home)) pick = { v, s };
       }
       if (!pick || !isFinite(pick.s)) { unplaced.push(t.key); continue; }
       const e = pick.s + t.dur;
       pick.v.items.push({ key: t.key, s: pick.s, e, part });
       for (const p of t.people) (busy.get(p) || busy.set(p, []).get(p)).push([pick.s, e]);
       if (t.where === "stage") partEnd[part] = Math.max(partEnd[part], e);
+      if (t.panel && !panelHome.has(t.panel)) panelHome.set(t.panel, pick.v.id);
       placed.set(t.key, { venue: pick.v.id, s: pick.s, e, part });
     }
   }
