@@ -140,9 +140,18 @@ People sign in with their own Google (Gmail) account. Add the exact Gmail addres
 
 **5. After the Kalamela**
 - **Backup & audit → Download full backup** and **Download Excel backup**. Save both in the Diocese Google Drive.
-- Print or download **Certificates** and the **Kendra list**.
+- Print or download the **Kendra list**. Make any certificates not printed on the day (below).
 - **Years → Archive.**
 - Remove temporary helpers from **Team & roles**.
+
+**Certificates (on the day, as results are announced)**
+- **Results → Certificates → Print certificates** fills the Diocese certificate design (`templates/Diocese_Kalamela_Certificate_2026.pdf`, made in Canva) with each winner's name, Centre and competition, and gives one PDF to print on **A4 landscape**.
+- Design by group: **Group I → "Below 18"**, **Group II → "Above 18"**, **team events → the design without a category**. Each design has 1st, 2nd and 3rd place versions.
+- One certificate per individual winner and **one per team member**. Substitutes are left out, so make theirs by hand if they took part.
+- **Only announced results** (on by default) leaves out events that aren't locked yet. Pick one event to print just that event's certificates right after it is announced.
+- Only final places count: at least 50% marks, verified, and ties decided.
+- Names typed all in capitals or all in small letters print as "Riya Mathew". The screen warns if a name has letters the certificate fonts can't print (Malayalam, for example).
+- **Next year:** replace the template with the new design using the same file name, keeping the same page order (Above 18 ×3, Below 18 ×3, team ×3). If the blank lines move, the positions in `js/certificates.js` need updating.
 
 ---
 

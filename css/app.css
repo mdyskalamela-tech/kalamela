@@ -487,3 +487,13 @@ a.btn{text-decoration:none}
 .brow.lead{border-color:var(--k-yellow);box-shadow:inset 4px 0 0 var(--k-yellow),var(--shadow)}
 /* the logo's four colours as a thin band under the top bar */
 .top::after{content:"";display:block;height:4px;background:linear-gradient(90deg,var(--k-maroon) 0 25%,var(--k-yellow) 25% 50%,var(--k-teal) 50% 75%,var(--k-orange) 75%)}
+
+/* certificates */
+.cert-make{padding:16px;display:grid;gap:12px;border-top:3px solid var(--k-yellow)}
+.cert-make-h h3{color:var(--maroon)}.cert-make-h p{margin:4px 0 0;font-size:13.5px;color:var(--muted)}
+.cert-make-row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.cert-make-row .lbl{display:flex;gap:8px;align-items:center;font-weight:600;font-size:13.5px}
+.cert-make-row .sel{max-width:min(360px,70vw)}
+.cert-make-row .chk{display:flex;gap:6px;align-items:center;font-size:13.5px}
+.cert-make-row .btn.primary{margin-left:auto}
+@media (max-width:600px){.cert-make-row .btn.primary{margin-left:0;width:100%;justify-content:center}}

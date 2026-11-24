@@ -53,3 +53,7 @@ Use a staging copy and test with real test accounts for each role. Do not use th
 - [ ] Test with staging Firebase and at least one account per role.
 - [ ] Take a full backup before deploying to GitHub Pages.
 - [ ] Publish only after all checks above pass.
+
+## Certificates
+- [ ] After one result is announced, Certificates → Print certificates for that event makes a PDF with the right design (Above 18, Below 18 or team), place, name, Centre and competition.
+- [ ] Print one certificate on A4 landscape and check margins and alignment on the real printer.

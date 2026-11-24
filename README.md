@@ -110,4 +110,9 @@ For small changes (renaming an event), unprotect the sheet in Excel (Review → 
 - **My Kalamela:** "Participant portal" header, chest-number search, an **Up next** card with a countdown on the day ("In 1h 6m"), and an event list with status icons. It still shows no names, dates of birth, phone numbers or photos.
 - Presentation only: no change to Firestore data, rules, roles, scoring, autosave, verification or locks. The notifications bell on the design board is not included because there is no notifications feature behind it.
 
+## Certificates (PDF from the Canva design)
+- **Results → Certificates → Print certificates** writes the winners onto `templates/Diocese_Kalamela_Certificate_2026.pdf` and downloads one PDF. Pages 1–3 are Above 18 (Group II), 4–6 Below 18 (Group I) and 7–9 team events, each as 1st / 2nd / 3rd.
+- Code: `js/certificates.js`, using pdf-lib 1.17.1 and fontkit 1.1.1 (`vendor/`) and the fonts Cormorant Garamond Bold (names) and Poppins SemiBold Italic (Centre and competition) in `fonts/` (SIL Open Font License). These load only when someone makes certificates.
+- Each design page is embedded once and reused, so 225 certificates make a PDF of about 8 MB in about a second. The fonts are embedded whole, because fontkit 1.1 drops letters when it trims them.
+
 See `UX_QA_CHECKLIST.md` for the required role and workflow checks before deployment.

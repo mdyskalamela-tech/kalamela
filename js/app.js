@@ -9,6 +9,7 @@ import { SITE_NAME, ORG_NAME } from "./config.js";
 import * as Admin from "./admin.js";
 import * as Stage from "./stage.js";
 import { stageQueue, stageStatusOf } from "./stage.js";
+import { makeCertificatesPdf } from "./certificates.js";
 
 // ---------------------------------------------------------------- state
 export const S = {
@@ -721,6 +722,15 @@ function vCerts(view) {
   view.innerHTML = `<div class="view">
     <div class="vhead"><div><h2>Certificates</h2><p>Every final 1st, 2nd and 3rd. Team winners are listed member by member.</p></div>
       <div class="actions">${printBtn()}<button class="btn" id="dlCert">Download (.xlsx)</button></div></div>
+    <section class="panel cert-make noprint">
+      <div class="cert-make-h"><h3>Print certificates</h3><p>Fills the Diocese certificate design with the winners: Group I on the <b>Below 18</b> design, Group II on <b>Above 18</b>, team events on the team design, one certificate per team member (substitutes left out). Print on A4 landscape.</p></div>
+      <div class="cert-make-row">
+        <label class="lbl">Event <select class="sel" id="certEv"><option value="">All events</option>${[...new Map(pr.map(x => [x.e.key, x.e])).values()].map(e => `<option value="${esc(e.key)}">${esc(e.ev)} · ${esc(gl(e.grp))}${e.lock ? "" : " (not announced)"}</option>`).join("")}</select></label>
+        <label class="chk"><input type="checkbox" id="certLocked" checked> Only announced results</label>
+        <span class="small muted" id="certCount"></span>
+        <button class="btn primary" id="mkCert">Make certificates (PDF)</button>
+      </div>
+    </section>
     <div class="panel scroll"><table><thead><tr><th>Event</th><th>Group</th><th>Place</th><th>Chest</th><th>Name</th><th>Sakha</th><th>Centre</th></tr></thead><tbody>
       ${ind.map(({ e, p, r }) => `<tr><td>${esc(e.ev)}</td><td class="muted">${esc(gl(e.grp))}</td><td class="place ${placeClass(p)}">${p}</td><td class="num">${esc(r.e.id)}</td><td>${esc(r.e.name)}</td><td>${esc(r.e.sakha)}</td><td>${esc(r.e.centre)}</td></tr>`).join("") || '<tr><td colspan="7" class="muted">No individual places yet.</td></tr>'}
     </tbody></table></div>
@@ -728,6 +738,37 @@ function vCerts(view) {
     <div class="panel scroll"><table><thead><tr><th>Event</th><th>Place</th><th>Team</th><th>Member</th><th>Role</th><th>Sakha</th><th>Centre</th></tr></thead><tbody>
       ${team.flatMap(({ e, p, r }) => (r.e.members?.length ? r.e.members : [{ name: "(members not listed)", role: "" }]).map(m => `<tr><td>${esc(e.ev)}</td><td class="place ${placeClass(p)}">${p}</td><td class="num">${esc(r.e.id)}</td><td>${esc(m.name)}</td><td class="muted">${esc(m.role)}</td><td>${esc(r.e.sakha)}</td><td>${esc(r.e.centre)}</td></tr>`)).join("") || '<tr><td colspan="7" class="muted">No team places yet.</td></tr>'}
     </tbody></table></div></div>`;
+  // one certificate per individual winner and per team member (substitutes left out)
+  const certList = () => {
+    const only = $("#certEv").value, locked = $("#certLocked").checked;
+    return pr.filter(({ e }) => (!only || e.key === only) && (!locked || e.lock)).flatMap(({ e, p, r }) => {
+      if (e.grp !== "op") return [{ grp: e.grp, place: p, name: r.e.name, centre: r.e.centre, event: e.ev }];
+      const mem = (r.e.members || []).filter(m => m.name && !/subst/i.test(m.role || ""));
+      return (mem.length ? mem : [{ name: r.e.name }]).map(m => ({ grp: "op", place: p, name: m.name, centre: r.e.centre, event: e.ev }));
+    });
+  };
+  const recount = () => {
+    const list = certList(), n = list.length;
+    // the certificate fonts cover English letters (with accents); Malayalam and other scripts would print as blanks
+    const odd = list.filter(c => /[^\u0000-\u024F\u2000-\u206F\u20B9]/.test(`${c.name}${c.centre}${c.event}`)).map(c => c.name);
+    $("#certCount").textContent = (n ? `${n} certificate${n === 1 ? "" : "s"}` : "No certificates for this choice yet")
+      + (odd.length ? ` · ${odd.length} name${odd.length === 1 ? " has" : "s have"} letters the certificate can't print (use English letters): ${odd.slice(0, 3).join(", ")}${odd.length > 3 ? "…" : ""}` : "");
+    $("#mkCert").disabled = !n;
+  };
+  $("#certEv").onchange = recount; $("#certLocked").onchange = recount; recount();
+  $("#mkCert").onclick = async () => {
+    const list = certList(), btn = $("#mkCert"); if (!list.length) return;
+    btn.disabled = true; const label = btn.textContent; btn.textContent = "Making certificates…";
+    try {
+      const pdf = await makeCertificatesPdf(list, msg => toast(msg));
+      const ev = $("#certEv").value, a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
+      a.download = `Kalamela_${S.ed}_Certificates${ev ? "_" + ev : ""}.pdf`; document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      toast(`${list.length} certificate${list.length === 1 ? "" : "s"} ready.`, "ok");
+    } catch (err) { console.error(err); toast("Couldn't make the certificates: " + (err.message || err), "bad"); }
+    finally { btn.textContent = label; recount(); }
+  };
   $("#dlCert").onclick = () => downloadXlsx(`Kalamela_${S.ed}_Certificates.xlsx`, [
     { name: "Individual", rows: [["Event", "Group", "Place", "Chest", "Name", "Sakha", "Centre"], ...ind.map(({ e, p, r }) => [e.ev, gl(e.grp), p, r.e.id, r.e.name, r.e.sakha, r.e.centre])] },
     { name: "Team members", rows: [["Event", "Place", "Team", "Member", "Role", "Sakha", "Centre"], ...team.flatMap(({ e, p, r }) => (r.e.members || []).map(m => [e.ev, p, r.e.id, m.name, m.role, r.e.sakha, r.e.centre]))] }]);
