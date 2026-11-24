@@ -64,6 +64,7 @@ const ctx = { S, cfg, phase, can, gl, D, renderAll: () => renderAll(), recompute
 
 // ---------------------------------------------------------------- boot & sign-in
 $("#siteTitle").textContent = SITE_NAME; $("#siteSub").textContent = ORG_NAME;
+window.__appStarted = true;   // tells index.html the code loaded
 window.addEventListener("hashchange", () => { $("#view").dataset.v = ""; renderAll(); window.scrollTo(0, 0); });
 window.addEventListener("online", renderNotice); window.addEventListener("offline", renderNotice);
 
