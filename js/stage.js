@@ -3,7 +3,7 @@
 // Live stage progress lives in public/{year}/status/{eventKey}; stage attendance in editions/{year}/att/{eid}.
 
 import { $, $$, esc, toast, enqueue, confirmBox } from "./util.js";
-import { autoPlan, normalise } from "./autoplan.js";
+import { autoPlan, normalise, MAX_PANELS, MAX_JUDGES } from "./autoplan.js";
 
 const store = { get: k => { try { return localStorage.getItem("mk." + k); } catch { return null; } },
                 set: (k, v) => { try { localStorage.setItem("mk." + k, v); } catch {} } };
@@ -46,7 +46,7 @@ export function vSchedule(view, ctx) {
           <label class="field"><span>Minutes per entry</span><input class="txt" type="number" min="1" max="60" data-fmin="${esc(s.id)}" value="${esc(s.perEntry || 6)}" style="width:6em" ${locked ? "disabled" : ""}></label>
           <button class="btn" data-fill="${esc(s.id)}" ${locked || !evs.length ? "disabled" : ""}>Fill times</button></div></div>
         ${evs.length ? `<div class="scroll"><table><thead><tr><th class="c">#</th><th>Event</th><th class="c">Entries</th><th>Planned start</th><th>Move to</th><th></th></tr></thead><tbody>
-          ${evs.map((L, i) => `<tr><td class="c num">${i + 1}</td><td>${esc(label(L))}</td><td class="c num">${(L.entries || []).length}</td>
+          ${evs.map((L, i) => `<tr><td class="c num">${i + 1}</td><td>${esc(label(L))}${work.items[L.key].panel ? `<div class="small muted">Judges: ${esc(work.items[L.key].panel)}</div>` : ""}</td><td class="c num">${(L.entries || []).length}</td>
             <td><input class="in" type="time" data-start="${esc(L.key)}" value="${esc(work.items[L.key].start || "")}" aria-label="Planned start: ${esc(label(L))}" ${locked ? "disabled" : ""}></td>
             <td><select class="in" data-move="${esc(L.key)}" aria-label="Move ${esc(label(L))}" ${locked ? "disabled" : ""}>${stageOpts(s.id)}<option value="-">Not scheduled</option></select></td>
             <td style="white-space:nowrap"><button class="btn" data-up="${esc(L.key)}" ${locked || i === 0 ? "disabled" : ""} title="Earlier" aria-label="Earlier">↑</button> <button class="btn" data-down="${esc(L.key)}" ${locked || i === evs.length - 1 ? "disabled" : ""} title="Later" aria-label="Later">↓</button></td></tr>`).join("")}
@@ -62,23 +62,36 @@ export function vSchedule(view, ctx) {
   const entriesOf = name => lists.filter(L => L.ev === name).reduce((n, L) => n + (L.entries || []).length, 0);
   const A = () => (work.auto = normalise(work.auto, ctx.cfg()));
   const dis = locked ? "disabled" : "";
+  const rulesJudges = name => { const e = cfgEvents().find(x => x.name === name); return e && Number(e.judges) === 1 ? 1 : 2; };
   const drawAuto = () => {
     const a = A(), evs = cfgEvents();
     const wasOpen = !!(document.querySelector("#apSettings details.apev") || {}).open;   // keep the event table open while editing it
     const num = (k, label, min, max, hint = "") => `<label class="field"><span>${label}</span><input class="txt" type="number" min="${min}" max="${max}" data-a="${k}" value="${esc(a[k])}" ${dis}>${hint ? `<small class="muted">${hint}</small>` : ""}</label>`;
     const time = (k, label) => `<label class="field"><span>${label}</span><input class="txt" type="time" data-a="${k}" value="${esc(a[k])}" ${dis}></label>`;
-    const sel = (name, f, val, opts) => `<select class="in" data-aev="${esc(name)}" data-af="${f}" aria-label="${esc(name)}: ${f}" ${dis}>${opts.map(([v, l]) => `<option value="${v}" ${v === val ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+    const sel = (name, f, val, opts) => `<select class="in" data-aev="${esc(name)}" data-af="${f}" aria-label="${esc(name)}: ${f === "panel" ? "judging panel" : f}" ${dis}>${opts.map(([v, l]) => `<option value="${esc(v)}" ${v === val ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+    const panelOpts = [["", "Marked later (no live judges)"], ...a.panels.map(p => [p.name, p.name])];
     const rows = ["first", "middle", "last"].flatMap(part => evs.filter(e => a.events[e.name].part === part)).map(e => {
       const x = a.events[e.name], n = entriesOf(e.name);
       return `<tr${n ? "" : ' class="muted"'}><td>${esc(e.name)}${e.type === "team" ? ' <span class="small muted">(team)</span>' : ""}</td>
         <td>${sel(e.name, "part", x.part, [["first", "First"], ["middle", "Middle"], ["last", "Last"]])}</td>
         <td>${sel(e.name, "where", x.where, [["stage", "Stage"], ["room", "Room"]])}</td>
         <td><input class="in" type="number" min="1" max="240" style="width:5.5em" data-aev="${esc(e.name)}" data-af="mins" value="${esc(x.mins)}" aria-label="${esc(e.name)}: minutes" ${dis}> <span class="small muted">${x.where === "room" ? "whole event" : "per entry"}</span></td>
-        <td><input class="in" list="apPanels" maxlength="40" style="width:11em" data-aev="${esc(e.name)}" data-af="panel" value="${esc(x.panel)}" placeholder="marked later" aria-label="${esc(e.name)}: judging panel" ${dis}></td>
+        <td>${sel(e.name, "panel", x.panel, panelOpts)}</td>
         <td class="c num">${n || "–"}</td></tr>`;
     }).join("");
-    const panelNames = [...new Set(evs.map(e => a.events[e.name].panel).filter(Boolean))];
-    $("#apSettings").innerHTML = `<p class="small muted" style="margin:0 0 8px">Judging panels: ${panelNames.length ? panelNames.map(esc).join(" · ") : "none"} (change them under Event order and timing).</p><div class="apgrid">
+    // Judging panels: one row per kind of panel
+    const evsOf = p => evs.filter(e => a.events[e.name].panel === p.name);
+    const totalJudges = a.panels.filter(p => evsOf(p).some(e => entriesOf(e.name))).reduce((n, p) => n + p.count * p.judges, 0);
+    const prow = (p, i) => {
+      const list = evsOf(p), differ = list.filter(e => rulesJudges(e.name) !== p.judges);
+      return `<tr><td><input class="in" maxlength="40" style="width:12em" data-pn="${i}" data-pf="name" value="${esc(p.name)}" aria-label="Panel name" ${dis}></td>
+        <td><input class="in" type="number" min="1" max="${MAX_PANELS}" style="width:4.5em" data-pn="${i}" data-pf="count" value="${esc(p.count)}" aria-label="${esc(p.name)}: how many panels" ${dis}></td>
+        <td><input class="in" type="number" min="1" max="${MAX_JUDGES}" style="width:4.5em" data-pn="${i}" data-pf="judges" value="${esc(p.judges)}" aria-label="${esc(p.name)}: judges in each panel" ${dis}>
+          ${differ.length ? `<div class="small" style="color:var(--warn)">Rules screen: ${rulesJudges(differ[0].name)} judge(s) for ${differ.length === list.length ? "these events" : esc(differ.map(e => e.name).join(", "))}</div>` : ""}</td>
+        <td class="small">${list.length ? esc(list.map(e => e.name).join(", ")) : '<span class="muted">No events yet – choose this panel in the event table below</span>'}</td>
+        <td><button class="btn danger" data-prm="${i}" style="padding:2px 8px" ${dis} title="Remove ${esc(p.name)}">Remove</button></td></tr>`;
+    };
+    $("#apSettings").innerHTML = `<div class="apgrid">
         ${num("stages", "Stages available", 1, 12, "maximum number of stages")}
         ${num("rooms", "Rooms for written &amp; drawing events", 0, 12, "0 = run them on the stages")}
         ${time("start", "Day starts")}
@@ -89,16 +102,16 @@ export function vSchedule(view, ctx) {
       </div>
       <label class="apchk"><input type="checkbox" data-ab="firstBarrier" ${a.firstBarrier ? "checked" : ""} ${dis}> <span><b>First</b> events finish on every stage before any <b>Middle</b> event starts on a stage</span></label>
       <label class="apchk"><input type="checkbox" data-ab="lastBarrier" ${a.lastBarrier ? "checked" : ""} ${dis}> <span><b>Last</b> events start only after every <b>First</b> and <b>Middle</b> event on the stages has finished</span></label>
-      <details class="apev"${wasOpen ? " open" : ""}><summary>Event order and timing <span class="muted small">· First, then Middle, then Last on every stage</span></summary>
-        <div class="scroll"><table><thead><tr><th>Event</th><th>Part</th><th>Where</th><th>Minutes</th><th>Judges (panel)</th><th class="c">Entries</th></tr></thead><tbody>${rows}</tbody></table></div>
-        <datalist id="apPanels">${panelNames.map(n => `<option value="${esc(n)}">`).join("")}</datalist>
-        <p class="small muted"><b>Judges:</b> events with the same panel name never run at the same time, and each panel is kept on one stage where possible. If you have two panels for one kind of event, give them different names (e.g. "Speech" for Malayalam and "Speech B" for English) so their events can run side by side. Leave it empty for events that are marked later (written and drawing).</p>
-        <p class="small muted">Minutes on a stage are per entry (performance plus getting on and off). In a room the whole event runs at once, so the minutes are for the whole event (including the 10 minutes when the topic is given).</p></details>`;
-  };
-  const drawPanelList = () => {
-    const names = [...new Set(cfgEvents().map(e => A().events[e.name].panel).filter(Boolean))];
-    const dl = $("#apPanels"); if (dl) dl.innerHTML = names.map(n => `<option value="${esc(n)}">`).join("");
-    const hd = $("#apSettings > p"); if (hd) hd.textContent = `Judging panels: ${names.length ? names.join(" · ") : "none"} (change them under Event order and timing).`;
+      <h4 class="aph">Judging panels <span class="muted small">· ${totalJudges} judge(s) needed in all</span></h4>
+      <p class="small muted" style="margin:0 0 6px">A panel judges one event at a time. If you have more than one panel of a kind (e.g. 2 Speech panels), set <b>How many panels</b>: their events are shared between them and can run side by side. Choose each event's panel in the event table below.</p>
+      <div class="scroll"><table><thead><tr><th>Panel</th><th>How many panels</th><th>Judges in each panel</th><th>Events</th><th></th></tr></thead><tbody>${a.panels.map(prow).join("") || '<tr><td colspan="5" class="muted">No judging panels. Add one below.</td></tr>'}</tbody></table></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:6px 0 4px">
+        <label class="field"><span>New panel</span><input class="txt" id="apNewPanel" maxlength="40" placeholder="e.g. Speech – English" ${dis}></label>
+        <button class="btn" id="apAddPanel" ${dis}>+ Add panel</button></div>
+      <label class="apchk"><input type="checkbox" data-ab="keepPanels" ${a.keepPanels ? "checked" : ""} ${dis}> <span>Keep each judging panel on one stage (judges don't have to move)</span></label>
+      <details class="apev"${wasOpen ? " open" : ""}><summary>Event order, timing and judges <span class="muted small">· First, then Middle, then Last on every stage</span></summary>
+        <div class="scroll"><table><thead><tr><th>Event</th><th>Part</th><th>Where</th><th>Minutes</th><th>Judging panel</th><th class="c">Entries</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <p class="small muted">Minutes on a stage are per entry (performance plus getting on and off). In a room the whole event runs at once, so the minutes are for the whole event (including the 10 minutes when the topic is given). Written and drawing events are usually <b>marked later</b>, so they need no live judges.</p></details>`;
   };
   const showReport = r => {
     const rp = r.report, late = rp.finishMins > 21 * 60;
@@ -109,12 +122,17 @@ export function vSchedule(view, ctx) {
     if (late || rp.pastMidnight) tips.push(`To finish earlier: add a stage (${work.stages.filter(s => s.kind === "stage").length} now), untick the second box so team events can start while individual events are still running, or lower the minutes per entry.`);
     // the panel that finishes last among the individual (Middle) events holds up the team events after it
     const slow = (rp.panels || []).filter(x => x.parts.includes("middle")).sort((a, b) => b.toMins - a.toMins)[0];
-    if ((late || rp.pastMidnight) && slow && slow.events > 2) tips.push(`The <b>${esc(slow.name)}</b> judges have ${slow.events} events back to back (${esc(slow.from)}–${esc(slow.to)}) and set the pace. A second ${esc(slow.name)} panel would shorten the day more than another stage: give some of its events another panel name under Event order and timing.`);
+    const slowKind = slow && (rp.kinds || []).find(k => k.name === slow.kind);
+    if ((late || rp.pastMidnight) && slow && slow.events > 2 && slowKind) tips.push(`The <b>${esc(slow.name)}</b> judges have ${slow.events} events back to back (${esc(slow.from)}–${esc(slow.to)}) and set the pace. One more ${esc(slowKind.name)} panel (How many panels: ${slowKind.count + 1}) would shorten the day more than another stage.`);
+    const differ = (rp.kinds || []).filter(k => k.events && k.rulesDiffer.length);
+    if (differ.length) tips.push(`Judges in each panel differ from the Rules screen for: ${differ.map(k => `<b>${esc(k.name)}</b> (${k.judges} here)`).join(", ")}. Marks entry follows the Rules screen (1 or 2 judges per event). Change one of them so they match.`);
     if (rp.unplaced.length) tips.push(`${rp.unplaced.length} event(s) could not be placed without a clash; they are under "Not scheduled". Add a stage or lower the buffer, then try again.`);
+    const kindRows = (rp.kinds || []).filter(k => k.events).map(k => `${esc(k.name)}: ${k.used} panel${k.used === 1 ? "" : "s"} × ${k.judges}`).join(" · ");
     $("#apOut").innerHTML = `<div class="banner ${rp.unplaced.length ? "bad" : late || rp.pastMidnight ? "warn" : "ok"}" style="display:block">
         <b>Planned ${rp.placed} events. Estimated finish ${esc(rp.finish)}${rp.pastMidnight ? " (after midnight)" : ""}.</b>
-        ${rp.clashes === 0 ? "No participant is in two events at once." : `<b>${rp.clashes} clash(es) – please report this.</b>`}
+        ${rp.clashes === 0 ? "No participant or judging panel is in two events at once." : `<b>${rp.clashes} clash(es) – please report this.</b>`}
         ${pe.first ? `First events end ${esc(pe.first)}. ` : ""}${pe.middle ? `Middle events end ${esc(pe.middle)}. ` : ""}${pe.last ? `Last events end ${esc(pe.last)}.` : ""}
+        ${rp.judgesNeeded ? `<br>Judges needed: <b>${rp.judgesNeeded}</b> (${kindRows}).` : ""}
         ${tips.map(t => `<br>${t}`).join("")}
         ${rp.skipped.length ? `<br><span class="small">${rp.skipped.length} event(s) with no entries were left out.</span>` : ""}
         <br><b>Nothing is saved yet.</b> Check the plan below, move events if needed, then press <b>Save and publish</b>.</div>
@@ -151,7 +169,7 @@ export function vSchedule(view, ctx) {
     const t = e.target, d = t.dataset;
     if (d.a) { const a = A(); a[d.a] = t.type === "number" ? Number(t.value) : t.value; return; }
     if (d.aev && d.af === "mins") { A().events[d.aev].mins = Number(t.value); return; }
-    if (d.aev && d.af === "panel") { A().events[d.aev].panel = t.value; return; }
+    if (d.pn !== undefined && d.pf !== "name") { A().panels[+d.pn][d.pf] = Number(t.value); return; }
     if (d.sname) work.stages[+d.sname].name = t.value.slice(0, 40);
     if (d.start) { work.items[d.start].start = t.value; const s = work.stages.find(x => x.id === work.items[d.start].stage); if (s) s.filled = false; }
     if (d.fstart) work.stages.find(s => s.id === d.fstart).first = t.value;
@@ -162,7 +180,18 @@ export function vSchedule(view, ctx) {
     const t = e.target, d = t.dataset;
     if (d.a) { A(); work.auto = normalise(work.auto, ctx.cfg()); drawAuto(); return; }
     if (d.ab) { A()[d.ab] = t.checked; return; }
-    if (d.aev) { const x = A().events[d.aev]; if (d.af === "mins") x.mins = Number(t.value); else x[d.af] = t.value; work.auto = normalise(work.auto, ctx.cfg()); if (d.af !== "panel") drawAuto(); else drawPanelList(); return; }
+    if (d.aev) { const x = A().events[d.aev]; if (d.af === "mins") x.mins = Number(t.value); else x[d.af] = t.value; work.auto = normalise(work.auto, ctx.cfg()); drawAuto(); return; }
+    if (d.pn !== undefined) {
+      const a = A(), p = a.panels[+d.pn];
+      if (d.pf === "name") {
+        const nn = t.value.replace(/\s+/g, " ").trim().slice(0, 40);
+        if (!nn) { toast("A panel needs a name.", "bad"); drawAuto(); return; }
+        if (a.panels.some((q, j) => j !== +d.pn && q.name.toLowerCase() === nn.toLowerCase())) { toast(`There is already a panel called ${nn}.`, "bad"); drawAuto(); return; }
+        for (const x of Object.values(a.events)) if (x.panel === p.name) x.panel = nn;   // renaming keeps its events
+        p.name = nn;
+      } else p[d.pf] = Number(t.value);
+      work.auto = normalise(work.auto, ctx.cfg()); drawAuto(); return;
+    }
     if (d.skind) { work.stages[+d.skind].kind = t.value; draw(); }
     if (d.move) {
       const old = work.items[d.move];
@@ -174,6 +203,19 @@ export function vSchedule(view, ctx) {
   view.onclick = e => {
     if (view.dataset.v !== "schedule") return;
     const b = e.target.closest("button"); if (!b) return; const d = b.dataset;
+    if (b.id === "apAddPanel") {
+      const a = A(), nn = ($("#apNewPanel").value || "").replace(/\s+/g, " ").trim().slice(0, 40);
+      if (!nn) return toast("Type a name for the new panel.", "bad");
+      if (a.panels.some(q => q.name.toLowerCase() === nn.toLowerCase())) return toast(`There is already a panel called ${nn}.`, "bad");
+      a.panels.push({ name: nn, count: 1, judges: 2 }); drawAuto();
+      toast(`${nn} added. Choose it for its events in the event table.`); return;
+    }
+    if (d.prm !== undefined) {
+      const a = A(), p = a.panels[+d.prm], n = Object.values(a.events).filter(x => x.panel === p.name).length;
+      for (const x of Object.values(a.events)) if (x.panel === p.name) x.panel = "";
+      a.panels.splice(+d.prm, 1); work.auto = { ...a, panels: a.panels }; drawAuto();
+      toast(n ? `${p.name} removed. Its ${n} event(s) are now "marked later" – choose another panel for them if they have live judges.` : `${p.name} removed.`); return;
+    }
     if (d.sdel !== undefined) { const s = work.stages[+d.sdel]; for (const [k, v] of Object.entries(work.items)) if (v.stage === s.id) delete work.items[k]; work.stages.splice(+d.sdel, 1); draw(); }
     if (d.up || d.down) {
       const key = d.up || d.down, it = work.items[key], sibs = lists.filter(L => work.items[L.key] && work.items[L.key].stage === it.stage).sort((a, b) => work.items[a.key].order - work.items[b.key].order);
