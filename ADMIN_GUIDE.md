@@ -108,7 +108,15 @@ People sign in with their own Google (Gmail) account. Add the exact Gmail addres
 **3. After the entry deadline**
 - **Centre forms → Build event lists and chest numbers.** Chest numbers start at 1001 (Group I) and 2001 (Group II). Building again later keeps the numbers already given.
 - **Entries → Participants & admit cards → Download admit cards (PDF).** You get 8 cards per A4 page, ready to print and cut. Each card has the Kalamela name, date and venue, the photo, chest number, group and events, but no name, Sakha or Centre. To print one Centre's cards, type the Centre's name in the search box first, then download. Print **Event lists** for stage managers.
-- **Settings → Schedule**: add the stages and rooms (e.g. Main Stage, Stage 2, Writing Hall). Put each event on one using **Put on**, order them with ↑ ↓, and use **Fill times** (first start + minutes per entry) to fill planned times; adjust by hand if needed. Click **Save and publish**. This also updates the participants' **My Kalamela** page. You can change it again any time, including on the day.
+- **Settings → Schedule → Auto-plan**: set the options and press **Auto-plan the schedule**. It fills in the stages and rooms, the running order and the planned times from the event lists. Nobody is put in two events at the same time (team members included).
+  - **Stages available**: the most stages you can run at once. **Rooms**: halls for written and drawing events (0 = run them on the stages).
+  - **Day starts**, **Lunch at**, **Lunch break**: nothing is planned across lunch.
+  - **Minutes between events on a stage** (clearing the stage) and **Minimum minutes between a participant's events** (time to change and move).
+  - **Event order and timing**: each event is **First**, **Middle** or **Last**. Every stage runs its First events, then Middle, then Last. The defaults: Group Song First, individual events Middle, Margamkali, Choreography, Tableau and Mime Last. Also set Stage or Room, and the minutes (per entry on a stage; for the whole event in a room).
+  - Two tick boxes: Middle events wait until every First event has finished; Last events wait until every individual event has finished. Unticking the second one lets team events start earlier, which shortens the day.
+  - The result shows the estimated finish time for each stage and room and warns if the day runs late. If it does, add a stage, untick the second box, or lower the minutes.
+  - Check the plan, move events with ↑ ↓ or change times if needed, then click **Save and publish**. The Auto-plan settings are saved with the schedule and come back next year.
+- You can still plan by hand: add the stages and rooms, put each event on one using **Put on**, order them with ↑ ↓, and use **Fill times** (first start + minutes per entry). Click **Save and publish**. This also updates the participants' **My Kalamela** page. You can change it again any time, including on the day.
 - Add stage managers under **Team & roles** with the role **Stage manager**.
 - Hold a **practice run** with the tabulation team and stage managers on the venue Wi-Fi, using a few made-up marks.
 - **Backup & audit → Clear practice marks.**
@@ -158,6 +166,7 @@ Rules used: Final score = (Judge I + Judge II) ÷ 2 (one judge for Quiz unless t
 | "… saved this row while you were changing it. Your change was NOT saved" | Two people changed the same row at once. The website kept the first save and refused the second, so nothing was overwritten. The row now shows what was saved: check it against the paper and re-type if needed. Give each operator separate events to avoid this. |
 | A participant's page says "schedule hasn't been published" | Open **Settings → Schedule** and click **Save and publish**. |
 | A participant's page says "No events found" | Check the chest number on the admit card. If the Centre's form was changed, rebuild the event lists, then **Save and publish** the schedule again. |
+| "Schedule saved … but the Auto-plan settings were not saved" | The security rules on Firebase are older than the website. Publish the current `firestore.rules` (Part A, step A5). The schedule itself was saved. |
 | A stage manager sees "No schedule yet" | The schedule hasn't been saved. An admin opens **Settings → Schedule**. |
 | Marks boxes are grey and the screen says "Results announced" | That event was locked after announcement. Only the chief tabulator can unlock it, on the Result slip. |
 | Entire site down, or the internet is gone for good | Use the latest **Excel backup** as a paper/Excel fallback and carry on by hand. Enter the marks later. |

@@ -19,6 +19,7 @@ For setup and yearly use, read **ADMIN_GUIDE.md** first. This file is for whoeve
 | `js/admin.js` | Centre forms, participants and admit cards, rules editor, years, team & roles, backup & audit |
 | `js/importer.js` | Reads a Centre's Excel form (entries, teams, photos) and checks it against the year's rules |
 | `js/stage.js` | Schedule screen (stages/rooms, running order, planned times), Stage screen for stage managers, and the data published for participants |
+| `js/autoplan.js` | Auto-plan: builds a schedule from the event lists (no participant clashes; First → Middle → Last on every stage; lunch; buffers). Pure functions, no screen or database |
 | `me.html`, `js/me.js` | "My Kalamela": public page for participants (no sign-in) – their events, stages, times, live stage progress and where to go next |
 | `js/compute.js` | Pure result maths: final scores, ranks, ties, status, points, championship |
 | `js/defaults.js` | Starting rules (2026–27 Manual) used only when creating a year from defaults |

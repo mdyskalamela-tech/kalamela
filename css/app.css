@@ -263,3 +263,11 @@ html{-webkit-text-size-adjust:100%}
 .seg button.on.absent{background:var(--bad-bg);color:var(--bad)}
 .seg button.on.pend{background:var(--sunk)}
 .seg button:disabled{cursor:not-allowed;opacity:.6}
+
+/* Auto-plan settings on the Schedule screen */
+.apgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:10px}
+.apgrid .field small{display:block;font-size:12px;margin-top:2px}
+.apchk{display:flex;gap:8px;align-items:flex-start;margin:6px 0;font-size:14px}
+.apchk input{margin-top:3px}
+.apev{margin-top:10px}
+.apev summary{cursor:pointer;font-weight:600;padding:4px 0}

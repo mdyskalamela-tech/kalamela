@@ -2,7 +2,8 @@
 // Stages and rooms, the running order and planned times live in editions/{year}/plan/main.
 // Live stage progress lives in public/{year}/status/{eventKey}; stage attendance in editions/{year}/att/{eid}.
 
-import { $, $$, esc, toast, enqueue } from "./util.js";
+import { $, $$, esc, toast, enqueue, confirmBox } from "./util.js";
+import { autoPlan, normalise } from "./autoplan.js";
 
 const store = { get: k => { try { return localStorage.getItem("mk." + k); } catch { return null; } },
                 set: (k, v) => { try { localStorage.setItem("mk." + k, v); } catch {} } };
@@ -56,6 +57,58 @@ export function vSchedule(view, ctx) {
         : '<p class="muted">Every event is on a stage or in a room.</p>'}</section>`;
     $("#schCount").textContent = `${lists.length - unplaced.length} of ${lists.length} events scheduled`;
   };
+  // ---------------- Auto-plan settings
+  const cfgEvents = () => (ctx.cfg().events || []);
+  const entriesOf = name => lists.filter(L => L.ev === name).reduce((n, L) => n + (L.entries || []).length, 0);
+  const A = () => (work.auto = normalise(work.auto, ctx.cfg()));
+  const dis = locked ? "disabled" : "";
+  const drawAuto = () => {
+    const a = A(), evs = cfgEvents();
+    const wasOpen = !!(document.querySelector("#apSettings details.apev") || {}).open;   // keep the event table open while editing it
+    const num = (k, label, min, max, hint = "") => `<label class="field"><span>${label}</span><input class="txt" type="number" min="${min}" max="${max}" data-a="${k}" value="${esc(a[k])}" ${dis}>${hint ? `<small class="muted">${hint}</small>` : ""}</label>`;
+    const time = (k, label) => `<label class="field"><span>${label}</span><input class="txt" type="time" data-a="${k}" value="${esc(a[k])}" ${dis}></label>`;
+    const sel = (name, f, val, opts) => `<select class="in" data-aev="${esc(name)}" data-af="${f}" aria-label="${esc(name)}: ${f}" ${dis}>${opts.map(([v, l]) => `<option value="${v}" ${v === val ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+    const rows = ["first", "middle", "last"].flatMap(part => evs.filter(e => a.events[e.name].part === part)).map(e => {
+      const x = a.events[e.name], n = entriesOf(e.name);
+      return `<tr${n ? "" : ' class="muted"'}><td>${esc(e.name)}${e.type === "team" ? ' <span class="small muted">(team)</span>' : ""}</td>
+        <td>${sel(e.name, "part", x.part, [["first", "First"], ["middle", "Middle"], ["last", "Last"]])}</td>
+        <td>${sel(e.name, "where", x.where, [["stage", "Stage"], ["room", "Room"]])}</td>
+        <td><input class="in" type="number" min="1" max="240" style="width:5.5em" data-aev="${esc(e.name)}" data-af="mins" value="${esc(x.mins)}" aria-label="${esc(e.name)}: minutes" ${dis}> <span class="small muted">${x.where === "room" ? "whole event" : "per entry"}</span></td>
+        <td class="c num">${n || "–"}</td></tr>`;
+    }).join("");
+    $("#apSettings").innerHTML = `<div class="apgrid">
+        ${num("stages", "Stages available", 1, 12, "maximum number of stages")}
+        ${num("rooms", "Rooms for written &amp; drawing events", 0, 12, "0 = run them on the stages")}
+        ${time("start", "Day starts")}
+        ${time("lunchAt", "Lunch at")}
+        ${num("lunchMins", "Lunch break (minutes)", 0, 180, "0 = no break")}
+        ${num("gap", "Minutes between events on a stage", 0, 60, "for clearing the stage")}
+        ${num("buffer", "Minimum minutes between a participant's events", 0, 120, "time to change and move")}
+      </div>
+      <label class="apchk"><input type="checkbox" data-ab="firstBarrier" ${a.firstBarrier ? "checked" : ""} ${dis}> <span><b>First</b> events finish on every stage before any <b>Middle</b> event starts on a stage</span></label>
+      <label class="apchk"><input type="checkbox" data-ab="lastBarrier" ${a.lastBarrier ? "checked" : ""} ${dis}> <span><b>Last</b> events start only after every <b>First</b> and <b>Middle</b> event on the stages has finished</span></label>
+      <details class="apev"${wasOpen ? " open" : ""}><summary>Event order and timing <span class="muted small">· First, then Middle, then Last on every stage</span></summary>
+        <div class="scroll"><table><thead><tr><th>Event</th><th>Part</th><th>Where</th><th>Minutes</th><th class="c">Entries</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <p class="small muted">Minutes on a stage are per entry (performance plus getting on and off). In a room the whole event runs at once, so the minutes are for the whole event (including the 10 minutes when the topic is given).</p></details>`;
+  };
+  const showReport = r => {
+    const rp = r.report, late = rp.finishMins > 21 * 60;
+    const pe = rp.partEnds || {};
+    const venues = rp.venues.map(v => `<tr><td>${esc(v.name)}</td><td>${v.kind === "room" ? "Room" : "Stage"}</td><td class="c num">${v.events}</td><td class="c num">${esc(v.end || "–")}</td></tr>`).join("");
+    const tips = [];
+    if (rp.pastMidnight) tips.push("The day would run <b>past midnight</b>, so planned times after midnight show as early-morning times.");
+    if (late || rp.pastMidnight) tips.push(`To finish earlier: add a stage (${work.stages.filter(s => s.kind === "stage").length} now), untick the second box so team events can start while individual events are still running, or lower the minutes per entry.`);
+    if (rp.unplaced.length) tips.push(`${rp.unplaced.length} event(s) could not be placed without a clash; they are under "Not scheduled". Add a stage or lower the buffer, then try again.`);
+    $("#apOut").innerHTML = `<div class="banner ${rp.unplaced.length ? "bad" : late || rp.pastMidnight ? "warn" : "ok"}" style="display:block">
+        <b>Planned ${rp.placed} events. Estimated finish ${esc(rp.finish)}${rp.pastMidnight ? " (after midnight)" : ""}.</b>
+        ${rp.clashes === 0 ? "No participant is in two events at once." : `<b>${rp.clashes} clash(es) – please report this.</b>`}
+        ${pe.first ? `First events end ${esc(pe.first)}. ` : ""}${pe.middle ? `Middle events end ${esc(pe.middle)}. ` : ""}${pe.last ? `Last events end ${esc(pe.last)}.` : ""}
+        ${tips.map(t => `<br>${t}`).join("")}
+        ${rp.skipped.length ? `<br><span class="small">${rp.skipped.length} event(s) with no entries were left out.</span>` : ""}
+        <br><b>Nothing is saved yet.</b> Check the plan below, move events if needed, then press <b>Save and publish</b>.</div>
+      <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Stage / room</th><th>Kind</th><th class="c">Events</th><th class="c">Ends</th></tr></thead><tbody>${venues}</tbody></table></div>
+      ${rp.busiest.length ? `<p class="small muted">Busiest participants (chest number: events): ${rp.busiest.map(([c, n]) => `${esc(c)}: ${n}`).join(" · ")}</p>` : ""}`;
+  };
   const fillTimes = s => {
     const [h, m] = String(s.first || "09:00").split(":").map(Number); let t = (h || 9) * 60 + (m || 0);
     lists.filter(L => work.items[L.key] && work.items[L.key].stage === s.id).sort((a, b) => work.items[a.key].order - work.items[b.key].order)
@@ -68,6 +121,11 @@ export function vSchedule(view, ctx) {
     <div class="vhead"><div><h2>Schedule</h2><p>Add the stages and rooms, put each event on one in running order, and give planned start times. Saving also updates the participants' "My Kalamela" page. You can change it on the day too (for example if a stage runs late).</p></div>
       <div class="actions"><span class="muted small" id="schCount"></span><button class="btn" id="schReset" ${locked ? "disabled" : ""}>Undo unsaved changes</button><button class="btn primary" id="schSave" ${locked ? "disabled" : ""}>Save and publish</button></div></div>
     ${locked && can.admin() ? '<div class="banner info">This year is archived, so the schedule is read-only.</div>' : ""}
+    <section class="card" id="apCard"><h3>Auto-plan</h3>
+      <p>Fills in the stages, running order and planned times below from the event lists. Nobody is put in two events at the same time (team members included), and each stage runs its <b>First</b> events, then <b>Middle</b>, then <b>Last</b>. Set the options, press <b>Auto-plan</b>, check the result, then <b>Save and publish</b>. The settings are saved with the schedule for next year.</p>
+      <div id="apSettings"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn primary" id="apRun" ${locked ? "disabled" : ""}>Auto-plan the schedule</button><button class="btn" id="apDefaults" ${locked ? "disabled" : ""}>Reset these settings to defaults</button></div>
+      <div id="apOut" aria-live="polite"></div></section>
     <section class="card"><h3>Stages and rooms</h3><div id="schStages"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="addStage" ${locked ? "disabled" : ""}>+ Add stage</button><button class="btn" id="addRoom" ${locked ? "disabled" : ""}>+ Add room</button></div>
       <p class="small muted">${esc(pub)} Participants' page: <a href="me.html" target="_blank" rel="noopener">me.html</a></p></section>
@@ -78,6 +136,8 @@ export function vSchedule(view, ctx) {
   view.oninput = e => {
     if (view.dataset.v !== "schedule") return;
     const t = e.target, d = t.dataset;
+    if (d.a) { const a = A(); a[d.a] = t.type === "number" ? Number(t.value) : t.value; return; }
+    if (d.aev && d.af === "mins") { A().events[d.aev].mins = Number(t.value); return; }
     if (d.sname) work.stages[+d.sname].name = t.value.slice(0, 40);
     if (d.start) { work.items[d.start].start = t.value; const s = work.stages.find(x => x.id === work.items[d.start].stage); if (s) s.filled = false; }
     if (d.fstart) work.stages.find(s => s.id === d.fstart).first = t.value;
@@ -86,6 +146,9 @@ export function vSchedule(view, ctx) {
   view.onchange = e => {
     if (view.dataset.v !== "schedule") return;
     const t = e.target, d = t.dataset;
+    if (d.a) { A(); work.auto = normalise(work.auto, ctx.cfg()); drawAuto(); return; }
+    if (d.ab) { A()[d.ab] = t.checked; return; }
+    if (d.aev) { const x = A().events[d.aev]; if (d.af === "mins") x.mins = Number(t.value); else x[d.af] = t.value; work.auto = normalise(work.auto, ctx.cfg()); drawAuto(); return; }
     if (d.skind) { work.stages[+d.skind].kind = t.value; draw(); }
     if (d.move) {
       const old = work.items[d.move];
@@ -108,19 +171,33 @@ export function vSchedule(view, ctx) {
     }
     if (d.fill) { const s = work.stages.find(x => x.id === d.fill); fillTimes(s); s.filled = true; draw(); toast(`Times filled for ${s.name}. Moving events up or down now updates them too.`); }
   };
-  $("#schReset").onclick = () => { work = structuredClone(S.plan || { stages: [], items: {} }); draw(); };
+  $("#schReset").onclick = () => { work = structuredClone(S.plan || { stages: [], items: {} }); drawAuto(); $("#apOut").innerHTML = ""; draw(); };
+  $("#apDefaults").onclick = () => { work.auto = normalise({}, ctx.cfg()); drawAuto(); toast("Auto-plan settings set back to the defaults (not saved yet)."); };
+  $("#apRun").onclick = async () => {
+    if (Object.keys(work.items).length && !(await confirmBox($("#apCard"), { title: "Replace the current schedule?", body: "Auto-plan replaces the stages, running order and planned times below. Nothing is saved until you press Save and publish; Undo unsaved changes brings back the saved schedule.", confirmLabel: "Replace and plan" }))) return;
+    const r = autoPlan(lists, ctx.cfg(), A(), work.stages);
+    work.stages = r.stages; work.items = r.items; work.auto = r.settings;
+    draw(); showReport(r); $("#apOut").scrollIntoView({ block: "nearest" });
+  };
   $("#schSave").onclick = async () => {
     if (work.stages.some(s => !s.name.trim())) return toast("Every stage or room needs a name.", "bad");
     const btn = $("#schSave"); btn.disabled = true;
     try {
       const plan = { stages: work.stages.map(s => ({ id: s.id, name: s.name.trim(), kind: s.kind === "room" ? "room" : "stage", first: s.first || "", perEntry: s.perEntry || 6, filled: !!s.filled })), items: work.items };
-      await D.savePlan(S.ed, plan);
+      if (work.auto) plan.auto = normalise(work.auto, ctx.cfg());
+      let settingsLost = false;
+      try { await D.savePlan(S.ed, plan); }
+      catch (e) {
+        if (!plan.auto || !/permission/i.test(String(e && (e.code || e.message)))) throw e;
+        delete plan.auto; await D.savePlan(S.ed, plan); settingsLost = true;   // older security rules: save the schedule without the Auto-plan settings
+      }
       const n = await D.publishPublic(S.ed, ...publicData(S, plan, ctx));
-      toast(`Schedule saved. Participants' page updated for ${n} chest numbers.`);
+      if (settingsLost) toast(`Schedule saved and participants' page updated, but the Auto-plan settings were not saved: publish the updated firestore.rules in Firebase (ADMIN_GUIDE.md, A5).`, "bad");
+      else toast(`Schedule saved. Participants' page updated for ${n} chest numbers.`);
     } catch (e) { console.error(e); toast("Couldn't save the schedule. Check the connection and try again.", "bad"); }
     btn.disabled = false;
   };
-  view._refresh = () => {}; draw();
+  view._refresh = () => {}; drawAuto(); draw();
 }
 
 /** What the participant page may show: event names, groups, stages, order, planned times and chest → events.

@@ -175,7 +175,7 @@ export function watchPlan(ed, cb, err) {
   return onSnapshot(doc(db, edPath(ed, "plan"), "main"), d => cb(d.exists() ? d.data() : null), err);
 }
 export async function savePlan(ed, plan) {
-  await setDoc(doc(db, edPath(ed, "plan"), "main"), { stages: plan.stages, items: plan.items, by: myEmail, at: serverTimestamp() });
+  await setDoc(doc(db, edPath(ed, "plan"), "main"), { stages: plan.stages, items: plan.items, ...(plan.auto ? { auto: plan.auto } : {}), by: myEmail, at: serverTimestamp() });
   await logAdmin(ed, "schedule", `Schedule saved: ${plan.stages.length} stages/rooms, ${Object.keys(plan.items).length} events placed`);
 }
 /** Publish what participants may see: event names, stages, times and which chest numbers are in which events.

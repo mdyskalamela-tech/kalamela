@@ -167,12 +167,13 @@ service cloud.firestore {
         allow delete: if isChief() && notArchived(ed);
       }
 
-      // Schedule: stages/rooms and each event's stage, running order and planned start.
+      // Schedule: stages/rooms, each event's stage, running order and planned start, and the Auto-plan settings.
       // Can change on the day (e.g. a stage runs late), but not once the year is archived.
       match /plan/{id} {
         allow read: if isMember();
         allow write: if isAdmin() && notArchived(ed) && id == 'main'
-          && request.resource.data.keys().hasOnly(['stages', 'items', 'by', 'at'])
+          && request.resource.data.keys().hasOnly(['stages', 'items', 'auto', 'by', 'at'])
+          && (!('auto' in request.resource.data) || request.resource.data.auto is map)
           && request.resource.data.stages is list && request.resource.data.stages.size() <= 40
           && request.resource.data.items is map
           && request.resource.data.by == myEmail() && request.resource.data.at == request.time;
