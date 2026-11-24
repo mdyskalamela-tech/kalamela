@@ -51,6 +51,7 @@ const VIEWS = [
   { id: "centres", label: "Centre forms", area: "entries", roles: ADM, fn: v => Admin.vCentres(v, ctx) },
   { id: "people", label: "Participants & admit cards", area: "entries", roles: CHIEF, fn: v => Admin.vPeople(v, ctx) },
   { id: "lists", label: "Event lists", area: "entries", roles: TAB, fn: vLists },
+  { id: "overview", label: "Overview", area: "tabulation", roles: ALL, fn: vOverview },
   { id: "control", label: "Control", area: "tabulation", roles: TAB, fn: vControl },
   { id: "stage", label: "Stage", area: "tabulation", roles: STG, fn: v => Stage.vStage(v, ctx) },
   { id: "entry", label: "Marks entry", area: "tabulation", roles: TAB, fn: vEntry },
@@ -78,7 +79,7 @@ function viewId() {
 function homeView() {
   if (S.role === "stage") return "stage";
   if (can.admin() && phase() === "setup") return "centres";
-  if (can.tab()) return "control";
+  if (can.tab()) return "overview";
   return "board";
 }
 // context handed to admin.js
@@ -217,6 +218,33 @@ function handleWriteError(e) {
 const printBtn = (label = "Print") => `<button class="btn" data-print>${label}</button>`;
 function wirePrint(view) { view.querySelectorAll("[data-print]").forEach(b => (b.onclick = () => window.print())); }
 
+// ================================================================ OVERVIEW
+function vOverview(view) {
+  const events = S.R?.events || [];
+  const total = events.length, ready = events.filter(e => e.status === "Ready").length;
+  const verified = S.R?.rowsAll?.filter(r => r.ver).length || 0;
+  const eligible = S.R?.rowsAll?.filter(r => r.att === "Present").length || 0;
+  const ties = events.filter(e => String(e.status).toLowerCase().includes("tie")).length;
+  const rec = events.filter(e => e.intake?.rec).length;
+  const pct = (a,b) => b ? Math.round(a / b * 100) : 0;
+  const links = [
+    ...(can.tab() ? [['control','Open control room','Monitor sheets, verification and event readiness'],['entry','Enter marks','Continue scoring and verify entries']] : []),
+    ['board','View scoreboard','See the current standings'],
+    ...(can.chief() ? [['backup','Backup & audit','Download a safety copy and review activity']] : [])
+  ];
+  view.innerHTML = `<div class="view overview-view">
+    <div class="vhead"><div><h2>Welcome to Kalamela</h2><p>Your operational overview for <b>${esc(S.edition?.name || S.ed)}</b>. Choose a task below to continue.</p></div><span class="phase ${esc(S.edition?.phase || 'setup')}">${esc(S.edition?.phase === 'live' ? 'Live event' : S.edition?.phase === 'archived' ? 'Archived' : 'Setting up')}</span></div>
+    <div class="tiles overview-metrics">
+      <div class="tile"><div class="k">Events</div><div class="v">${total}</div><div class="small muted">In this Kalamela</div></div>
+      <div class="tile"><div class="k">Sheets received</div><div class="v">${rec}<small> / ${total}</small></div><div class="bar"><i style="width:${pct(rec,total)}%"></i></div></div>
+      <div class="tile"><div class="k">Entries verified</div><div class="v">${verified}<small> / ${eligible}</small></div><div class="bar"><i style="width:${pct(verified,eligible)}%"></i></div></div>
+      <div class="tile"><div class="k">Ready to release</div><div class="v">${ready}<small> / ${total}</small></div><div class="small muted">${ties} tie${ties===1?'':'s'} need committee attention</div></div>
+    </div>
+    <section class="overview-section"><div class="section-heading"><div><h3>Quick actions</h3><p>Jump straight into the work that needs doing.</p></div></div><div class="quick-grid">${links.map(([id,title,desc])=>`<a class="quick-card" href="#${id}"><span class="quick-arrow" aria-hidden="true">↗</span><b>${esc(title)}</b><span>${esc(desc)}</span></a>`).join('')}</div></section>
+    ${can.tab() ? `<section class="overview-section"><div class="section-heading"><div><h3>Event readiness</h3><p>Live summary based on the current event lists.</p></div><a href="#control">Open control room →</a></div><div class="panel scroll"><table><thead><tr><th>Event</th><th>Group</th><th>Sheets</th><th>Progress</th><th>Status</th></tr></thead><tbody>${events.slice(0,8).map(e=>`<tr><td>${esc(e.ev)}</td><td>${esc(gl(e.grp))}</td><td>${e.intake?.rec?'Received':'Awaiting'}</td><td>${e.verc} / ${Math.max(0,e.n-(e.absent||0))} verified</td><td>${pill(e.status)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Event lists will appear here once they are built.</td></tr>'}</tbody></table></div></section>` : `<section class="overview-section"><h3>Scoreboard</h3><p class="muted">The latest published standings are available on the Scoreboard page.</p><a class="btn primary" href="#board">Open scoreboard</a></section>`}
+  </div>`;
+}
+
 // ================================================================ CONTROL
 function vControl(view) {
   if (!S.R.events.length) return noData(view);
@@ -292,6 +320,7 @@ function vEntry(view) {
     <div id="lockBanner"></div>
     <div class="panel legend"><span class="muted">Criteria:</span>${e.cr.map((c, i) => `<span><b>${LETTERS[i]}</b> ${esc(c.name)} <span class="muted">(${c.max})</span></span>`).join("")}
       <span class="muted">· Final score = ${nj === 2 ? "(Judge I + Judge II) ÷ 2" : "the judge's total"}, out of ${e.maxTotal}</span></div>
+    <div class="marks-tools"><label class="field marks-search"><span>Find participant</span><input class="txt" id="markSearch" type="search" placeholder="Search chest number or name" autocomplete="off"></label><span class="small muted" id="markVisible">${e.n} entries</span><span class="small muted">Tip: press Enter to move between score fields</span></div>
     <div class="panel scroll"><table class="marks">
       <thead><tr><th rowspan="2">Chest</th><th rowspan="2">Attendance</th><th colspan="${ncr + 2}" class="j1">${nj === 2 ? "JUDGE I" : "JUDGE"}</th>${nj === 2 ? `<th colspan="${ncr + 2}" class="j2">JUDGE II</th>` : ""}<th rowspan="2">Final</th><th rowspan="2">Check</th><th rowspan="2">Verified</th></tr>
         <tr>${jh(1)}${nj === 2 ? jh(2) : ""}</tr></thead>
@@ -302,9 +331,10 @@ function vEntry(view) {
   $("#prevEv").onclick = () => stepEntry(-1); $("#nextEv").onclick = () => stepEntry(1);
   const tb = $("#marksBody");
   tb.addEventListener("input", onMarkInput); tb.addEventListener("change", onMarkChange);
+  $("#markSearch").addEventListener("input", ev => { const q = ev.target.value.trim().toLowerCase(); let shown = 0; for (const tr of tb.rows) { const hit = !q || tr.cells[0].textContent.toLowerCase().includes(q); tr.hidden = !hit; if (hit) shown++; } $("#markVisible").textContent = `${shown} of ${tb.rows.length} entries`; });
   tb.addEventListener("keydown", ev => {
     if (ev.key !== "Enter" || !ev.target.classList.contains("mk")) return;
-    ev.preventDefault(); const all = $$("input.mk", tb).filter(i => !i.disabled), i = all.indexOf(ev.target), nx = all[i + (ev.shiftKey ? -1 : 1)];
+    ev.preventDefault(); const all = $$("input.mk", tb).filter(i => !i.disabled && !i.closest("tr").hidden), i = all.indexOf(ev.target), nx = all[i + (ev.shiftKey ? -1 : 1)];
     if (nx) { nx.focus(); nx.select(); }
   });
   refreshEntry();
@@ -587,7 +617,9 @@ function vAwards(view) {
       ${list.map(p => `<tr><td class="num">${esc(p.id)}</td><td>${esc(p.name)}<div class="small muted">${esc(p.wins.join(", "))}</div></td><td>${esc(p.centre)}</td><td class="c num"><b>${p.pts}</b></td></tr>`).join("") || '<tr><td colspan="4" class="muted">No points yet.</td></tr>'}
       </tbody></table></div>`;
   };
-  view.innerHTML = `<div class="view"><div class="vhead"><div><h2>Kalaprathibha &amp; Kalathilakam</h2><p>Highest individual-event points (team events not counted), minimum ${minPts} points.</p></div><div class="actions">${printBtn()}</div></div>
+  const noGender = S.R.people.filter(p => !p.gender && p.pts > 0);
+  const warn = noGender.length ? `<div class="banner warn" style="display:block"><b>${noGender.length} participant(s) with points have no gender</b> and are not counted for either award: chest ${noGender.map(p => esc(p.id)).join(", ")}. An admin sets it under Entries → Participants.</div>` : "";
+  view.innerHTML = `<div class="view">${warn}<div class="vhead"><div><h2>Kalaprathibha &amp; Kalathilakam</h2><p>Highest individual-event points (team events not counted), minimum ${minPts} points.</p></div><div class="actions">${printBtn()}</div></div>
     <div class="award">${card("Kalaprathibha (male)", "Male")}${card("Kalathilakam (female)", "Female")}</div></div>`;
   wirePrint(view);
 }

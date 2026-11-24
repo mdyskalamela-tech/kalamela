@@ -11,7 +11,18 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="css/app.css">
 <style>
-  .me{max-width:640px;margin:0 auto;display:grid;gap:14px}
+  .me{max-width:680px;margin:0 auto;display:grid;gap:16px;padding-bottom:24px}
+  .me-intro{background:var(--maroon);background:linear-gradient(135deg,var(--maroon),color-mix(in srgb,var(--maroon) 72%,#31101d));color:#fff;border-radius:16px;padding:22px 20px;box-shadow:0 8px 24px color-mix(in srgb,var(--maroon) 18%,transparent)}
+  .me-intro h2{font-size:25px}.me-intro p{color:#f6e8ed!important;max-width:48ch}
+  .lookup{background:var(--surface);padding:12px;border:1px solid var(--line);border-radius:13px;box-shadow:0 2px 10px color-mix(in srgb,var(--ink) 4%,transparent)}
+  .lookup input{min-height:48px;border-radius:9px}.lookup .btn{min-height:48px;border-radius:9px}
+  .evrow{padding:15px 16px;border-radius:12px;min-height:76px}
+  .nextcard{border-radius:15px;padding:20px;box-shadow:0 4px 16px color-mix(in srgb,var(--maroon) 7%,transparent)}
+  .nextcard .ev{font-size:clamp(22px,5vw,28px)}
+  .me-section-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:8px 0 0}
+  .me-section-title h3{font-size:18px}
+  .me-footer{font-size:12px;color:var(--muted);text-align:center;padding:8px 10px}
+  @media(max-width:520px){.me{gap:12px}.me-intro{padding:18px 16px}.lookup{display:grid}.lookup input,.lookup .btn{width:100%}.evrow{grid-template-columns:1fr;gap:9px}.evrow .pill{justify-self:start}}
   .lookup{display:flex;gap:8px;flex-wrap:wrap}
   .lookup input{flex:1 1 160px;font-size:22px;font-family:var(--f-mono);padding:10px 12px;min-width:0}
   .lookup .btn{font-size:16px;padding:10px 18px}
@@ -39,11 +50,11 @@
 </header>
 <main class="wrap">
   <div class="me">
-    <div id="intro"><h2 style="font-size:22px">Your events, stages and times</h2><p class="muted" style="margin:4px 0 0">Type the chest number on your admit card, or scan the QR code on it. This page updates by itself.</p></div>
+    <div id="intro" class="me-intro"><h2>Your Kalamela, at a glance</h2><p style="margin:6px 0 0">Find your events, check your stage and know when it is your turn. Live updates appear automatically.</p></div>
     <form class="lookup" id="f"><label class="sr" for="chest" style="position:absolute;left:-9999px">Chest number</label>
       <input class="txt" id="chest" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Chest no., e.g. 1012" autocomplete="off">
       <button class="btn primary" type="submit">Show my events</button></form>
-    <div id="out"></div>
+    <div id="out" aria-live="polite"></div><div class="me-footer">Keep this page open during the event for live stage updates · MDYS Mumbai Diocese</div>
   </div>
 </main>
 <script type="module" src="js/me.js"></script>

@@ -118,6 +118,8 @@ export async function unlockEvent(ed, key, reason) {
   b.set(doc(collection(db, edPath(ed, "audit"))), { kind: "unlock", eid: key, detail: String(reason || "").slice(0, 300), by: myEmail, at: serverTimestamp() });
   await b.commit();
 }
+/** Change one participant (e.g. set a gender the Centre form didn't give). Admins only, while the year is being set up. */
+export const updateParticipant = (ed, pid, data) => setDoc(doc(db, edPath(ed, "participants"), pid), data, { merge: true });
 export const savePayment = (ed, centreId, data) => setDoc(doc(db, edPath(ed, "payments"), centreId), { ...data, by: myEmail });
 
 // ---------------------------------------------------------------- admin writes
