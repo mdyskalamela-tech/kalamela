@@ -1,0 +1,37 @@
+Copyright (c) 2026 Nelson Varghese. All rights reserved.
+
+This software, including its source code, design, documentation and the
+files in this repository (together, "the Software"), was created by
+Nelson Varghese and is his property.
+
+The source code is published so that it can be viewed. No licence is
+granted to copy, modify, publish, host, distribute, sublicense or sell
+the Software, in whole or in part, except:
+
+  1. as allowed by the written permission given to Mar Thoma Yuvajana
+     Sakhyam, Mumbai Diocese (MDYS) for running the MDYS Kalamela; or
+  2. with the prior written permission of Nelson Varghese.
+
+Viewing or forking this repository on GitHub, as GitHub's Terms of
+Service allow, does not grant any other right.
+
+To ask for permission, contact Nelson Varghese through
+https://github.com/nelsonsvarghese-ctrl
+
+Not covered by this licence
+---------------------------
+* Third-party components keep their own licences, found next to them:
+  vendor/  SheetJS (Apache-2.0), JSZip (MIT or GPL-3.0), jsPDF (MIT),
+           qrcode-generator (MIT), pdf-lib (MIT), fontkit (MIT)
+  fonts/   Cormorant Garamond and Poppins (SIL Open Font License 1.1)
+  The Firebase JavaScript SDK is loaded from Google (Apache-2.0).
+* The Kalamela logo (img/), the certificate design
+  (templates/Diocese_Kalamela_Certificate_2026.pdf), and the names and
+  emblems of the Mar Thoma Yuvajana Sakhyam and MDYS belong to their
+  owners.
+* All data entered into the Software (participants, Centres, marks,
+  results) belongs to the organisation that runs it.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES
+OR OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.

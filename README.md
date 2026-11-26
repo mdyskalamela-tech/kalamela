@@ -1,6 +1,16 @@
-# MDYS Kalamela website – technical notes
+# MDYS Kalamela website
 
-For setup and yearly use, read **ADMIN_GUIDE.md** first. This file is for whoever changes the website itself.
+**What is Kalamela?** Kalamela ("arts fair" in Malayalam) is the annual arts festival of the Mar Thoma Yuvajana Sakhyam, the youth movement of the Mar Thoma Syrian Church. Young people from parishes across the Diocese compete in music, dance, drama, fine arts and literary events. The winners go on to the national (Kendra) level.
+
+This web app runs the Mumbai Diocese Kalamela end to end. It imports Centre registration forms, assigns chest numbers, prints admit cards, plans the stage schedule, and lets tabulators enter and verify judges' marks live. It then publishes results, the championship table and certificates.
+
+**Created by Nelson Varghese.** © 2026 Nelson Varghese, all rights reserved. See [LICENSE](LICENSE). MDYS uses it with the author's written permission. For any other use, ask the author first.
+
+---
+
+## Technical notes
+
+For setup and yearly use, read **ADMIN_GUIDE.md** first. This section is for whoever changes the website itself.
 
 ## How it's built
 - Plain HTML, CSS and JavaScript modules. **No build step**: edit a file, upload it to GitHub, and GitHub Pages serves it a minute later.
