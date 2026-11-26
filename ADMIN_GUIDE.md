@@ -47,7 +47,7 @@ These Firebase values are not passwords. Anyone could see them in the website; t
 ### A6. Put the website on GitHub Pages
 1. Go to **github.com** and **Sign up** with the Diocese email. Choose a username, e.g. `mdys-kalamela`.
 2. Click **+ → New repository**. Name: `kalamela`. Choose **Public** (needed for free GitHub Pages; there are no secrets in the files). Click **Create repository**.
-3. Click **uploading an existing file**. Drag in **everything in this folder except the `test` folder**: `index.html`, `firestore.rules`, the guides, and the folders `css`, `js`, `vendor`, `templates`, `tools`. Click **Commit changes**.
+3. Click **uploading an existing file**. Drag in **everything in this folder except the `test` folder**: `index.html`, `me.html`, `firestore.rules`, `storage.rules`, `storage-cors.json`, the guides, and the folders `css`, `js`, `vendor`, `templates`, `fonts`, `img`, `tools`. Click **Commit changes**.
 4. Go to the repository's **Settings → Pages**. Under **Build and deployment**, Source: **Deploy from a branch**; Branch: **main**, folder **/ (root)**. Click **Save**.
 5. After a minute or two the address appears at the top of that page, e.g. `https://mdys-kalamela.github.io/kalamela/`. This is the Kalamela website. Bookmark it.
 
@@ -144,15 +144,41 @@ People sign in with their own Google (Gmail) account. Add the exact Gmail addres
 - **Years → Archive.**
 - Remove temporary helpers from **Team & roles**.
 
+**Certificate designs (Settings → Certificate designs, admins)**
+- **One-time update first:** publish the current `firestore.rules` (Part A, step A5). Until then, saving designs says "the database rules need the update", and certificates use the built-in Diocese design.
+- **Built-in design:** until you save your own, certificates use the Diocese 2026 Canva design (`templates/Diocese_Kalamela_Certificate_2026.pdf`):
+  - **Group I → "Below 18"**
+  - **Group II → "Above 18"**
+  - **Team events → the design without a category**
+
+  Each has 1st, 2nd and 3rd place pages.
+- **Add a design:**
+  1. Make it in Canva (or any tool) with blank spaces for the details. Download it as **PDF**.
+  2. Upload the PDF to the **`templates` folder** on GitHub (Add file → Upload files).
+  3. In **Certificate designs → Add a design**, give it a name and type (or pick) the file name.
+- **Place the text:** in the editor, **drag** each box onto its blank space and drag a box's **right edge** to change its width. Arrow keys move the selected box. Each box has:
+  - **Text:** made of the fields `{name}`, `{centre}`, `{event}`, `{place}`, `{group}`, `{sakha}` and `{year}`, plus any words you like, for example `{event} ({group})`.
+  - **Font, size and colour.**
+  - **Smallest size:** long text shrinks down to this size to fit the box.
+- **Pages:** choose which page of the PDF is used for 1st, 2nd and 3rd place. A single page for all places is fine; add a `{place}` box if the design doesn't print the place.
+- **Check it:** **Preview PDF** shows exactly how a certificate prints, with sample details.
+- **Which design each event uses:** set a **default**, optionally one per **group**, and optionally one for **single events**. An event uses its own choice, else its group's, else the default.
+- Click **Save designs**. Designs are saved per year and can be changed on the day; an archived year is read-only.
+- **Uploading designs from the website instead of GitHub (optional):** this needs Firebase's paid **Blaze** plan. This much use stays within the free allowance, but a billing card is required. Then:
+  1. In Firebase, **Upgrade** to Blaze, and open **Storage → Get started**.
+  2. **Storage → Rules:** paste `storage.rules` and **Publish**. Allow it to read Firestore when asked.
+  3. Allow the website to download the files. Run this once in Google Cloud Shell, after uploading `storage-cors.json`:
+     `gsutil cors set storage-cors.json gs://mdys-kalamela.firebasestorage.app`
+  4. In `js/config.js` add the line `export const CERT_UPLOADS = true;` and upload it.
+
+  Certificate designs then shows **or upload a PDF**.
+
 **Certificates (on the day, as results are announced)**
-- **Results → Certificates → Print certificates** fills the Diocese certificate design (`templates/Diocese_Kalamela_Certificate_2026.pdf`, made in Canva) with each winner's name, Centre and competition, and gives one PDF to print on **A4 landscape**.
-- Design by group: **Group I → "Below 18"**, **Group II → "Above 18"**, **team events → the design without a category**. Each design has 1st, 2nd and 3rd place versions.
+- **Results → Certificates → Print certificates** writes each winner's details onto the designs above and gives one PDF to print. The screen names the designs in use.
 - One certificate per individual winner and **one per team member**. Substitutes are left out, so make theirs by hand if they took part.
 - **Only announced results** (on by default) leaves out events that aren't locked yet. Pick one event to print just that event's certificates right after it is announced.
 - Only final places count: at least 50% marks, verified, and ties decided.
 - Names typed all in capitals or all in small letters print as "Riya Mathew". The screen warns if a name has letters the certificate fonts can't print (Malayalam, for example).
-- **Next year:** replace the template with the new design using the same file name, keeping the same page order (Above 18 ×3, Below 18 ×3, team ×3). If the blank lines move, the positions in `js/certificates.js` need updating.
-
 ---
 
 ## Part C – tabulation room on the day
@@ -189,6 +215,7 @@ Rules used: Final score = (Judge I + Judge II) ÷ 2 (one judge for Quiz unless t
 | "… saved this row while you were changing it. Your change was NOT saved" | Two people changed the same row at once. The website kept the first save and refused the second, so nothing was overwritten. The row now shows what was saved: check it against the paper and re-type if needed. Give each operator separate events to avoid this. |
 | A participant's page says "schedule hasn't been published" | Open **Settings → Schedule** and click **Save and publish**. |
 | A participant's page says "No events found" | Check the chest number on the admit card. If the Centre's form was changed, rebuild the event lists, then **Save and publish** the schedule again. |
+| "Not allowed: the database rules need the update for certificate designs" | Publish the current `firestore.rules` (Part A, step A5). Certificates keep using the built-in design until then. |
 | "Schedule saved … but the Auto-plan settings were not saved" | The security rules on Firebase are older than the website. Publish the current `firestore.rules` (Part A, step A5). The schedule itself was saved. |
 | A Centre's file says "not a Kalamela Centre entry form" | The Centre changed sheet names, or sent a different file. Ask for the original registration form, filled in, without renaming sheets. |
 | "Prathibha & Thilakam" says some participants with points have no gender | Set their gender under **Entries → Participants** before the year goes live. After going live it can't be changed. |

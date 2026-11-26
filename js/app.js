@@ -9,13 +9,15 @@ import { SITE_NAME, ORG_NAME } from "./config.js";
 import * as Admin from "./admin.js";
 import * as Stage from "./stage.js";
 import { stageQueue, stageStatusOf } from "./stage.js";
-import { makeCertificatesPdf } from "./certificates.js";
+import { makeCertificatesPdf, effectiveSetup, designFor } from "./certificates.js";
+import * as CertDesign from "./certdesign.js";
 
 // ---------------------------------------------------------------- state
 export const S = {
   user: null, role: "", editions: [], ed: null, edition: null,
   lists: new Map(), marks: new Map(), intake: new Map(), decisions: new Map(), locks: new Map(),
   plan: null, status: new Map(), att: new Map(),   // schedule, live stage progress, stage attendance
+  certSetup: null,   // certificate designs (null = the built-in Diocese design)
   centres: new Map(), participants: new Map(), payments: new Map(),
   loaded: {}, R: null, edUnsubs: [], peopleWatched: false,
 };
@@ -66,6 +68,7 @@ const VIEWS = [
   { id: "kendra", label: "Kendra list", area: "results", roles: ALL, fn: vKendra },
   { id: "rules", label: "Rules", area: "settings", roles: ADM, fn: v => Admin.vRules(v, ctx) },
   { id: "schedule", label: "Schedule", area: "settings", roles: ADM, fn: v => Stage.vSchedule(v, ctx) },
+  { id: "certdesign", label: "Certificate designs", area: "settings", roles: ADM, fn: v => CertDesign.vCertDesign(v, ctx) },
   { id: "years", label: "Years", area: "settings", roles: ADM, fn: v => Admin.vYears(v, ctx) },
   { id: "team", label: "Team & roles", area: "settings", roles: ADM, fn: v => Admin.vTeam(v, ctx) },
   { id: "backup", label: "Backup & audit", area: "settings", roles: CHIEF, fn: v => Admin.vBackup(v, ctx) },
@@ -168,13 +171,14 @@ function stopEdition() { for (const u of S.edUnsubs) try { u(); } catch {} S.edU
 function selectEdition(id) {
   stopEdition(); S.ed = id; store.set("ed", id);
   for (const m of [S.lists, S.marks, S.intake, S.decisions, S.locks, S.centres, S.participants, S.payments, S.status, S.att]) m.clear();
-  S.plan = null; draft.clear(); bases.clear(); kinds.clear(); S.loaded = {};
+  S.plan = null; S.certSetup = null; draft.clear(); bases.clear(); kinds.clear(); S.loaded = {};
   const on = (name, map) => S.edUnsubs.push(D.watchCol(id, name, m => { map.clear(); for (const [k, v] of m) map.set(k, v); S.loaded[name] = true; renderAll(); }, permErr));
   S.edUnsubs.push(D.watchEdition(id, e => { S.edition = e; renderAll(); }, permErr));
   on("lists", S.lists);
   if (S.role !== "stage") { on("marks", S.marks); on("intake", S.intake); on("decisions", S.decisions); on("locks", S.locks); }   // stage managers don't see marks
   if (S.role !== "viewer") on("att", S.att);
   S.edUnsubs.push(D.watchPlan(id, p => { S.plan = p; renderAll(); }, permErr));
+  S.edUnsubs.push(D.watchCertSetup(id, c => { S.certSetup = c; renderAll(); }, () => { S.certSetup = null; }));   // before the rules allow it, the built-in design is used
   S.edUnsubs.push(D.watchStageStatus(id, m => { S.status.clear(); for (const [k, v] of m) S.status.set(k, v); renderAll(); }, permErr));
   if (can.chief()) { on("centres", S.centres); on("payments", S.payments); }
   renderAll();
@@ -723,7 +727,7 @@ function vCerts(view) {
     <div class="vhead"><div><h2>Certificates</h2><p>Every final 1st, 2nd and 3rd. Team winners are listed member by member.</p></div>
       <div class="actions">${printBtn()}<button class="btn" id="dlCert">Download (.xlsx)</button></div></div>
     <section class="panel cert-make noprint">
-      <div class="cert-make-h"><h3>Print certificates</h3><p>Fills the Diocese certificate design with the winners: Group I on the <b>Below 18</b> design, Group II on <b>Above 18</b>, team events on the team design, one certificate per team member (substitutes left out). Print on A4 landscape.</p></div>
+      <div class="cert-make-h"><h3>Print certificates</h3><p>Writes the winners onto the certificate designs set under Settings → Certificate designs: one certificate per individual winner and per team member (substitutes left out).</p><p class="small muted" id="certDesigns"></p></div>
       <div class="cert-make-row">
         <label class="lbl">Event <select class="sel" id="certEv"><option value="">All events</option>${[...new Map(pr.map(x => [x.e.key, x.e])).values()].map(e => `<option value="${esc(e.key)}">${esc(e.ev)} · ${esc(gl(e.grp))}${e.lock ? "" : " (not announced)"}</option>`).join("")}</select></label>
         <label class="chk"><input type="checkbox" id="certLocked" checked> Only announced results</label>
@@ -742,9 +746,10 @@ function vCerts(view) {
   const certList = () => {
     const only = $("#certEv").value, locked = $("#certLocked").checked;
     return pr.filter(({ e }) => (!only || e.key === only) && (!locked || e.lock)).flatMap(({ e, p, r }) => {
-      if (e.grp !== "op") return [{ grp: e.grp, place: p, name: r.e.name, centre: r.e.centre, event: e.ev }];
+      const base = { key: e.key, grp: e.grp, place: p, centre: r.e.centre, event: e.ev, group: gl(e.grp), sakha: r.e.sakha || "", year: S.edition?.name || S.ed };
+      if (e.grp !== "op") return [{ ...base, name: r.e.name }];
       const mem = (r.e.members || []).filter(m => m.name && !/subst/i.test(m.role || ""));
-      return (mem.length ? mem : [{ name: r.e.name }]).map(m => ({ grp: "op", place: p, name: m.name, centre: r.e.centre, event: e.ev }));
+      return (mem.length ? mem : [{ name: r.e.name }]).map(m => ({ ...base, name: m.name }));
     });
   };
   const recount = () => {
@@ -753,6 +758,8 @@ function vCerts(view) {
     const odd = list.filter(c => /[^\u0000-\u024F\u2000-\u206F\u20B9]/.test(`${c.name}${c.centre}${c.event}`)).map(c => c.name);
     $("#certCount").textContent = (n ? `${n} certificate${n === 1 ? "" : "s"}` : "No certificates for this choice yet")
       + (odd.length ? ` · ${odd.length} name${odd.length === 1 ? " has" : "s have"} letters the certificate can't print (use English letters): ${odd.slice(0, 3).join(", ")}${odd.length > 3 ? "…" : ""}` : "");
+    const setup = effectiveSetup(S.certSetup), used = [...new Set(list.map(c => designFor(setup, c.key, c.grp)))].map(id => setup.templates[id]?.name || id);
+    $("#certDesigns").innerHTML = used.length ? `Design${used.length === 1 ? "" : "s"}: ${used.map(esc).join(", ")}${can.admin() ? ' · <a href="#certdesign">Change</a>' : ""}` : "";
     $("#mkCert").disabled = !n;
   };
   $("#certEv").onchange = recount; $("#certLocked").onchange = recount; recount();
@@ -760,7 +767,7 @@ function vCerts(view) {
     const list = certList(), btn = $("#mkCert"); if (!list.length) return;
     btn.disabled = true; const label = btn.textContent; btn.textContent = "Making certificates…";
     try {
-      const pdf = await makeCertificatesPdf(list, msg => toast(msg));
+      const pdf = await makeCertificatesPdf(list, S.certSetup, { onProgress: msg => toast(msg), readStorage: D.readCertFile });
       const ev = $("#certEv").value, a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
       a.download = `Kalamela_${S.ed}_Certificates${ev ? "_" + ev : ""}.pdf`; document.body.append(a); a.click(); a.remove();

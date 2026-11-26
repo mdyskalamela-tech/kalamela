@@ -179,6 +179,17 @@ service cloud.firestore {
           && request.resource.data.by == myEmail() && request.resource.data.at == request.time;
       }
 
+      // Certificate designs: which PDF template files to use, where the winner's details go, and which design each event uses.
+      // Everyone on the team reads it (anyone may make certificates); only admins change it, also on the day, not once archived.
+      match /certs/{id} {
+        allow read: if isMember();
+        allow write: if isAdmin() && notArchived(ed) && id == 'main'
+          && request.resource.data.keys().hasOnly(['templates', 'assign', 'by', 'at'])
+          && request.resource.data.templates is map && request.resource.data.templates.size() >= 1 && request.resource.data.templates.size() <= 30
+          && request.resource.data.assign is map
+          && request.resource.data.by == myEmail() && request.resource.data.at == request.time;
+      }
+
       // Stage attendance, marked by stage managers: Present or Absent (no record = pending)
       match /att/{eid} {
         allow read: if isStageCrew();

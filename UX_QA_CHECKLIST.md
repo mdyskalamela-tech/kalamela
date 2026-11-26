@@ -55,5 +55,7 @@ Use a staging copy and test with real test accounts for each role. Do not use th
 - [ ] Publish only after all checks above pass.
 
 ## Certificates
+- [ ] After publishing the new `firestore.rules`: Settings → Certificate designs → move a box, Save, reload the page; the change is still there.
+- [ ] Preview PDF for each design used this year; the text sits on the blank lines.
 - [ ] After one result is announced, Certificates → Print certificates for that event makes a PDF with the right design (Above 18, Below 18 or team), place, name, Centre and competition.
 - [ ] Print one certificate on A4 landscape and check margins and alignment on the real printer.

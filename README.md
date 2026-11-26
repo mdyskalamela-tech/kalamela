@@ -120,9 +120,13 @@ For small changes (renaming an event), unprotect the sheet in Excel (Review → 
 - **My Kalamela:** "Participant portal" header, chest-number search, an **Up next** card with a countdown on the day ("In 1h 6m"), and an event list with status icons. It still shows no names, dates of birth, phone numbers or photos.
 - Presentation only: no change to Firestore data, rules, roles, scoring, autosave, verification or locks. The notifications bell on the design board is not included because there is no notifications feature behind it.
 
-## Certificates (PDF from the Canva design)
-- **Results → Certificates → Print certificates** writes the winners onto `templates/Diocese_Kalamela_Certificate_2026.pdf` and downloads one PDF. Pages 1–3 are Above 18 (Group II), 4–6 Below 18 (Group I) and 7–9 team events, each as 1st / 2nd / 3rd.
-- Code: `js/certificates.js`, using pdf-lib 1.17.1 and fontkit 1.1.1 (`vendor/`) and the fonts Cormorant Garamond Bold (names) and Poppins SemiBold Italic (Centre and competition) in `fonts/` (SIL Open Font License). These load only when someone makes certificates.
-- Each design page is embedded once and reused, so 225 certificates make a PDF of about 8 MB in about a second. The fonts are embedded whole, because fontkit 1.1 drops letters when it trims them.
+## Certificates and certificate designs
+- **Settings → Certificate designs** (`js/certdesign.js`): PDF templates, text boxes placed by dragging on a pdf.js preview, and which design each event uses (event → group → default).
+  - Saved in Firestore at `editions/{year}/certs/main` as `{templates, assign, by, at}`; the rules allow admin writes unless the year is archived.
+  - With nothing saved, the built-in Diocese 2026 design in `js/certificates.js` (`BUILTIN`) is used.
+- **Template files** live in `templates/` (a plain file name only; the website fetches nothing else). The optional website upload uses Firebase Storage at `certificates/{year}/{id}.pdf`. It needs the Blaze plan, `storage.rules`, the CORS setting in `storage-cors.json`, and `export const CERT_UPLOADS = true` in `js/config.js`; `db.js` reads that setting with a namespace import, so older config files still work.
+- **Box positions** are PDF points from the top-left of the page's visible area (CropBox); `y` is the text baseline. Text is centred in (or starts at the left of) the box and shrinks in half-points to fit the width less 6 pt, down to the box's smallest size. The editor uses the same rule, and its Preview PDF is the real output.
+- **Printing:** `js/certificates.js` uses pdf-lib 1.17.1 and fontkit 1.1.1. Each template page is embedded once and reused, so 225 certificates make about 8 MB in about a second. The fonts in `fonts/` (Cormorant Garamond Bold and Poppins Regular, SemiBold and SemiBold Italic, SIL Open Font License) are embedded whole, because fontkit 1.1 drops letters when it trims them.
+- **The editor** uses pdf.js 4.10.38 (`vendor/pdfjs/`, with eval switched off), which includes the fix for CVE-2024-4367. pdf.js, pdf-lib, the fonts and the templates load only on the screens that need them.
 
 See `UX_QA_CHECKLIST.md` for the required role and workflow checks before deployment.

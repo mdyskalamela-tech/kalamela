@@ -1,0 +1,48 @@
+rules_version = '2';
+
+// Firebase Storage rules for MDYS Kalamela.
+// Only needed if certificate designs are uploaded from the website (CERT_UPLOADS = true in js/config.js,
+// which needs the Firebase Blaze plan). Designs kept in the website's templates/ folder don't use Storage.
+//
+// Publish in Firebase console → Storage → Rules. The first time, Firebase asks to let these rules
+// read Firestore (to check the team list): allow it.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function email() {
+      return request.auth.token.email.lower();
+    }
+    function isOwner() {
+      return signedIn() && email() == 'mdys.kalamela@gmail.com';
+    }
+    function role() {
+      return firestore.exists(/databases/(default)/documents/users/$(email()))
+        ? firestore.get(/databases/(default)/documents/users/$(email())).data.role : '';
+    }
+    function isMember() {
+      return isOwner() || (signedIn() && role() in ['admin', 'chief', 'tabulator', 'stage', 'viewer']);
+    }
+    function isAdmin() {
+      return isOwner() || (signedIn() && role() == 'admin');
+    }
+
+    // Certificate design PDFs: everyone on the team can read them (anyone may make certificates);
+    // only admins upload or delete; PDF only, at most 20 MB.
+    match /certificates/{ed}/{file} {
+      allow read: if isMember();
+      allow create, update: if isAdmin()
+        && file.matches('[A-Za-z0-9_-]{1,60}[.]pdf')
+        && request.resource.contentType == 'application/pdf'
+        && request.resource.size < 20 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    // Nothing else is stored.
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

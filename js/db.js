@@ -2,6 +2,7 @@
 // Firebase SDK version is pinned; update it here only after testing (see README.md).
 
 import { FIREBASE_CONFIG, OWNER_EMAIL } from "./config.js";
+import * as CONFIG from "./config.js";   // optional settings (e.g. CERT_UPLOADS) are read from here, so older config files still work
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
@@ -207,13 +208,43 @@ export async function saveAtt(ed, eid, att) {
   if (att) await setDoc(ref, { att, by: myEmail, name: myName, at: serverTimestamp() }); else await deleteDoc(ref);
 }
 
+// ---------------------------------------------------------------- certificate designs
+/** The certificate designs for a year (templates, text boxes and which design each event uses), or null if none saved. */
+export function watchCertSetup(ed, cb, err) {
+  return onSnapshot(doc(db, edPath(ed, "certs"), "main"), d => cb(d.exists() ? d.data() : null), err);
+}
+export async function saveCertSetup(ed, setup) {
+  await setDoc(doc(db, edPath(ed, "certs"), "main"), { templates: setup.templates, assign: setup.assign, by: myEmail, at: serverTimestamp() });
+  await logAdmin(ed, "certificates", `Certificate designs saved: ${Object.keys(setup.templates).length} design(s)`);
+}
+/** Uploading designs from the website needs Firebase Storage (Blaze plan): switch on with CERT_UPLOADS = true in config.js. */
+export const certUploadsOn = () => configured && CONFIG.CERT_UPLOADS === true && !!FIREBASE_CONFIG.storageBucket;
+let storageMod = null;
+async function storage() {
+  if (!storageMod) storageMod = await import("https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js");
+  return { m: storageMod, st: storageMod.getStorage(app) };
+}
+/** Uploads a design PDF; returns its path for the design ("storage:certificates/<year>/<id>.pdf"). */
+export async function uploadCertFile(ed, id, file) {
+  const { m, st } = await storage(), path = `certificates/${ed}/${id}.pdf`;
+  await m.uploadBytes(m.ref(st, path), file, { contentType: "application/pdf" });
+  await logAdmin(ed, "certificates", `Certificate design file uploaded: ${String(file.name || "").slice(0, 80)}`);
+  return "storage:" + path;
+}
+/** The bytes of an uploaded design file. */
+export async function readCertFile(path) {
+  if (!certUploadsOn()) throw new Error("Uploaded designs need Firebase Storage, which isn't switched on in config.js");
+  const { m, st } = await storage();
+  return new Uint8Array(await m.getBytes(m.ref(st, path)));
+}
+
 export async function readAudit(ed, n = 300) {
   const s = await getDocs(query(collection(db, edPath(ed, "audit")), orderBy("at", "desc"), limit(n)));
   return s.docs.map(d => d.data());
 }
 export async function readAll(ed) {
   const out = {};
-  for (const name of ["centres", "participants", "lists", "marks", "intake", "decisions", "locks", "payments", "att", "plan"]) {
+  for (const name of ["centres", "participants", "lists", "marks", "intake", "decisions", "locks", "payments", "att", "plan", "certs"]) {
     const s = await getDocs(collection(db, edPath(ed, name)));
     out[name] = Object.fromEntries(s.docs.map(d => [d.id, d.data()]));
   }

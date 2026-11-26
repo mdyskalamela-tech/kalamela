@@ -22,7 +22,8 @@ Not covered by this licence
 ---------------------------
 * Third-party components keep their own licences, found next to them:
   vendor/  SheetJS (Apache-2.0), JSZip (MIT or GPL-3.0), jsPDF (MIT),
-           qrcode-generator (MIT), pdf-lib (MIT), fontkit (MIT)
+           qrcode-generator (MIT), pdf-lib (MIT), fontkit (MIT),
+           pdf.js (Apache-2.0)
   fonts/   Cormorant Garamond and Poppins (SIL Open Font License 1.1)
   The Firebase JavaScript SDK is loaded from Google (Apache-2.0).
 * The Kalamela logo (img/), the certificate design
